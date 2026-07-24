@@ -5,6 +5,7 @@ dist-ssr
 .env
 .env.*
 !.env.example
+server/src/generated
 
 # Logs
 *.log
