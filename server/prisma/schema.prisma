@@ -13,16 +13,22 @@ datasource db {
 model User {
   id            String    @id
   name          String
-  email         String    @unique
+  email         String
   emailVerified Boolean   @default(false)
   image         String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   sessions      Session[]
   accounts      Account[]
+  role          Role
 
   @@unique([email])
-  @@map("users")
+  @@map("user")
+}
+
+enum Role {
+  admin
+  agent
 }
 
 model Session {
@@ -38,7 +44,7 @@ model Session {
 
   @@unique([token])
   @@index([userId])
-  @@map("sessions")
+  @@map("session")
 }
 
 model Account {
@@ -58,7 +64,7 @@ model Account {
   updatedAt             DateTime  @updatedAt
 
   @@index([userId])
-  @@map("accounts")
+  @@map("account")
 }
 
 model Verification {
@@ -70,5 +76,5 @@ model Verification {
   updatedAt  DateTime @updatedAt
 
   @@index([identifier])
-  @@map("verifications")
+  @@map("verification")
 }
