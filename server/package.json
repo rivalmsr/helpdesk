@@ -11,10 +11,12 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.0",
     "@prisma/client": "^7.9.0",
+    "better-auth": "^1.6.25",
     "express": "^4.21.2",
     "pg": "^8.22.0"
   },
   "devDependencies": {
+    "@better-auth/cli": "^1.4.21",
     "@types/express": "^5.0.0",
     "@types/pg": "^8.20.0",
     "dotenv": "^17.4.2",
