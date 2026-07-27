@@ -4,17 +4,17 @@ import { hashPassword } from "better-auth/crypto";
 import { prisma } from "../src/lib/prisma";
 import { Role } from "../src/generated/prisma/client";
 
-async function main() {
-  const email = process.env.ADMIN_EMAIL;
-  const password = process.env.ADMIN_PASSWORD;
-
-  if (!email || !password) {
-    throw new Error("ADMIN_EMAIL and ADMIN_PASSWORD must be set in server/.env");
-  }
+async function seedUser(opts: {
+  name: string;
+  email: string;
+  password: string;
+  role: Role;
+}) {
+  const { name, email, password, role } = opts;
 
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
-    console.log(`Admin user already exists: ${email}`);
+    console.log(`User already exists: ${email}`);
     return;
   }
 
@@ -24,10 +24,10 @@ async function main() {
   await prisma.user.create({
     data: {
       id: userId,
-      name: "Admin",
+      name,
       email,
       emailVerified: true,
-      role: Role.admin,
+      role,
       accounts: {
         create: {
           id: randomUUID(),
@@ -39,7 +39,35 @@ async function main() {
     },
   });
 
-  console.log(`Admin user created: ${email}`);
+  console.log(`${role} user created: ${email}`);
+}
+
+async function main() {
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  if (!adminEmail || !adminPassword) {
+    throw new Error("ADMIN_EMAIL and ADMIN_PASSWORD must be set in server/.env");
+  }
+
+  await seedUser({
+    name: "Admin",
+    email: adminEmail,
+    password: adminPassword,
+    role: Role.admin,
+  });
+
+  const agentEmail = process.env.AGENT_EMAIL;
+  const agentPassword = process.env.AGENT_PASSWORD;
+
+  if (agentEmail && agentPassword) {
+    await seedUser({
+      name: "Agent",
+      email: agentEmail,
+      password: agentPassword,
+      role: Role.agent,
+    });
+  }
 }
 
 main()
