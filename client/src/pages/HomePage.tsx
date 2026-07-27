@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Button } from '@/components/ui/button'
 
 type HealthResponse = {
   status: string
@@ -24,13 +25,9 @@ function HomePage() {
   return (
     <main className="mx-auto max-w-md p-4 text-center">
       <h1 className="text-2xl font-semibold">Helpdesk</h1>
-      <button
-        type="button"
-        onClick={checkHealth}
-        className="mt-4 rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-      >
+      <Button type="button" onClick={checkHealth} className="mt-4">
         Check API health
-      </button>
+      </Button>
       {health && (
         <pre className="mt-4 rounded bg-gray-100 p-4 text-left">
           {JSON.stringify(health, null, 2)}
