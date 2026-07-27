@@ -1,16 +1,38 @@
+import type { ReactNode } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router'
-import { useSession } from './lib/auth-client'
+import { useSession, type Role } from './lib/auth-client'
 import LoginPage from './pages/LoginPage'
 import HomePage from './pages/HomePage'
+import UsersPage from './pages/UsersPage'
 import NavBar from './components/NavBar'
 
-function AuthedLayout() {
+function AuthedLayout({ children }: { children: ReactNode }) {
   return (
     <>
       <NavBar />
-      <HomePage />
+      {children}
     </>
   )
+}
+
+type ProtectedRouteProps = {
+  children: ReactNode
+  role?: Role
+}
+
+/** Assumes the caller has already resolved `useSession()`'s pending state. */
+function ProtectedRoute({ children, role }: ProtectedRouteProps) {
+  const { data: session } = useSession()
+
+  if (!session) {
+    return <Navigate to="/login" replace />
+  }
+
+  if (role && session.user.role !== role) {
+    return <Navigate to="/" replace />
+  }
+
+  return <AuthedLayout>{children}</AuthedLayout>
 }
 
 function AppRoutes() {
@@ -32,7 +54,19 @@ function AppRoutes() {
       />
       <Route
         path="/"
-        element={session ? <AuthedLayout /> : <Navigate to="/login" replace />}
+        element={
+          <ProtectedRoute>
+            <HomePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/users"
+        element={
+          <ProtectedRoute role="admin">
+            <UsersPage />
+          </ProtectedRoute>
+        }
       />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
