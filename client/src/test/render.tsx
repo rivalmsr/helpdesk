@@ -1,0 +1,24 @@
+import type { ReactElement, ReactNode } from 'react'
+import { render } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+/**
+ * Renders `ui` wrapped in a fresh {@link QueryClientProvider}.
+ *
+ * `retryDelay: 0` strips the backoff between retries so components that set
+ * their own `retry` count (e.g. UsersPage's `retry: 3`) reach their error
+ * state without slowing the test down.
+ */
+export function renderWithQueryClient(ui: ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retryDelay: 0 } },
+  })
+
+  function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    )
+  }
+
+  return render(ui, { wrapper: Wrapper })
+}

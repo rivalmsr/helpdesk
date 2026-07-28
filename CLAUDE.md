@@ -75,6 +75,16 @@ Better Auth, email/password only, with self-serve sign-up disabled — the only 
 - `client/src/App.tsx` — client-side routing with `react-router` (`BrowserRouter`/`Routes`/`Route`). A `ProtectedRoute` component redirects to `/login` when unauthenticated and to `/` when an optional `role` prop doesn't match `session.user.role`; routes are `/` (`HomePage`), `/login`, and `/users` (`UsersPage`, admin-only), with `*` → `/`. This is client-side guarding only (no route-loader protection) — the API is separately enforced by `requireRole` (above). `client/src/components/NavBar.tsx` reads `session.user.name`, calls `signOut()`, and shows a Users link only when `session.user.role === 'admin'`.
 - `@better-auth/cli` (server devDependency) was used to scaffold the Better Auth Prisma schema/migrations initially; you generally won't need to run it again unless adding new Better Auth plugins that require schema changes.
 
+## Testing (component)
+
+Client component/unit tests use **Vitest + React Testing Library**, scoped to the `client` workspace. Specs are colocated next to the code as `client/src/**/*.test.tsx`. See `client/src/pages/UsersPage.test.tsx` for the reference pattern.
+
+- **Run tests with `bun run test`, never bare `bun test`.** `bun test` invokes Bun's own test runner, which picks up the `*.test.tsx` files but provides only a partial `vi` shim (e.g. no `vi.mocked`) and fails. Commands: `bun --filter client test` / `bun --filter client test:watch` from the root, or `bun run test` / `bun run test:watch` from `client/`.
+- Config lives in the `test` block of `client/vite.config.ts` (which imports `defineConfig` from `vitest/config`, a superset of Vite's): `environment: 'happy-dom'`, `globals: true`, `setupFiles: './src/test/setup.ts'`.
+- **Environment is `happy-dom`, not `jsdom`** — jsdom pulls in `undici`, whose `CacheStorage` throws `webidl.util.markAsUncloneable is not a function` under Bun's runtime. Don't switch back to jsdom.
+- `client/src/test/setup.ts` loads `@testing-library/jest-dom/vitest` matchers and runs RTL `cleanup()` after each test. `vitest/globals` is in `tsconfig.app.json`'s `types` so the globals (`describe`/`it`/`expect`/`vi`) typecheck.
+- For components that use TanStack Query, render them via `renderWithQueryClient(ui)` from `client/src/test/render.tsx` — it wraps the tree in a fresh `QueryClientProvider` with `retryDelay: 0` so a component's own `retry` count reaches the error state without real backoff (which would blow the test timeout). Mock network calls by mocking axios with `vi.mock('axios', () => ({ default: { get: vi.fn() } }))`.
+
 ## Testing (E2E)
 
 Playwright is configured at the repo root, running against a **separate test database** so runs never touch dev data.
