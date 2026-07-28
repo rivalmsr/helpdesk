@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import axios from 'axios'
 import type { Role } from '@/lib/auth-client'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -25,18 +26,18 @@ type User = {
 }
 
 function UsersPage() {
-  const [users, setUsers] = useState<User[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    fetch('/api/users')
-      .then((res) => {
-        if (!res.ok) throw new Error(`Request failed: ${res.status}`)
-        return res.json()
-      })
-      .then(setUsers)
-      .catch(() => setError('Failed to load users'))
-  }, [])
+  const {
+    data: users,
+    isPending,
+    isError,
+  } = useQuery({
+    queryKey: ['users'],
+    queryFn: async () => {
+      const res = await axios.get<User[]>('/api/users')
+      return res.data
+    },
+    retry: 3,
+  })
 
   return (
     <main className="mx-auto max-w-2xl p-4">
@@ -48,8 +49,10 @@ function UsersPage() {
           <CardDescription>Everyone with access to the helpdesk.</CardDescription>
         </CardHeader>
         <CardContent>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          {!error && !users && (
+          {isError && (
+            <p className="text-sm text-destructive">Failed to load users</p>
+          )}
+          {isPending && (
             <p className="text-sm text-muted-foreground">Loading…</p>
           )}
           {users && users.length === 0 && (

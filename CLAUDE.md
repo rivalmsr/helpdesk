@@ -40,6 +40,15 @@ The two packages are independently deployable but developed together; the root `
 - Theme: default light/dark CSS variables and Chrome autofill override both live in `client/src/index.css`. Font is Geist Variable via `@fontsource-variable/geist`.
 - Add components with `cd client && bunx shadcn@latest add <name>`. Names don't always match classic shadcn (e.g. `form` → `field`) — use `bunx shadcn@latest search @shadcn --query <term>` to check first.
 
+## Data fetching (client)
+
+Client-side API calls use **axios** for the HTTP request and **TanStack Query** (`@tanstack/react-query`) for fetching state — prefer these over raw `fetch`/`useEffect` for new code.
+
+- The `QueryClient` and `QueryClientProvider` are set up at the app root in `client/src/main.tsx` (wrapping `<App />`), so `useQuery`/`useMutation` work anywhere in the tree.
+- Fetch data with `useQuery({ queryKey, queryFn })`, where `queryFn` uses axios (e.g. `axios.get<T>('/api/...')` and returns `res.data`). Drive rendering off `isPending` / `isError` / `data`, not manual `useState`. See `client/src/pages/UsersPage.tsx` for the pattern.
+- Call the API with same-origin relative paths (`/api/...`) so the Vite proxy handles it — see Commands above. Axios rejects on non-2xx by default, so no manual `res.ok` check is needed.
+- Install client deps from **inside `client/`** (`cd client && bun add <pkg>`); the root `bun add --filter client <pkg>` currently fails with a Bun `DependencyLoop` error in this workspace.
+
 ## Database
 
 Prisma 7 + PostgreSQL, scoped entirely to `server/`:
