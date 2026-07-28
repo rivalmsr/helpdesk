@@ -13,7 +13,9 @@ function NavBar() {
   return (
     <nav className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
       <div className="flex items-center gap-4">
-        <span className="font-semibold">Helpdesk</span>
+        <Link to="/" className="font-semibold">
+          Helpdesk
+        </Link>
         {session?.user.role === 'admin' && (
           <Link to="/users" className="text-sm text-gray-600 hover:text-gray-900">
             Users
