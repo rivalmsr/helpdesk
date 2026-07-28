@@ -17,6 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Skeleton } from '@/components/ui/skeleton'
 
 type User = {
   id: string
@@ -52,13 +53,10 @@ function UsersPage() {
           {isError && (
             <p className="text-sm text-destructive">Failed to load users</p>
           )}
-          {isPending && (
-            <p className="text-sm text-muted-foreground">Loading…</p>
-          )}
-          {users && users.length === 0 && (
+          {!isError && users && users.length === 0 && (
             <p className="text-sm text-muted-foreground">No users found.</p>
           )}
-          {users && users.length > 0 && (
+          {!isError && (isPending || users.length > 0) && (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -68,21 +66,37 @@ function UsersPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell className="font-medium">{user.name}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {user.email}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={user.role === 'admin' ? 'default' : 'secondary'}
-                      >
-                        {user.role}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {isPending
+                  ? Array.from({ length: 3 }).map((_, i) => (
+                      <TableRow key={i}>
+                        <TableCell>
+                          <Skeleton className="h-4 w-24" />
+                        </TableCell>
+                        <TableCell>
+                          <Skeleton className="h-4 w-40" />
+                        </TableCell>
+                        <TableCell>
+                          <Skeleton className="h-5 w-14 rounded-4xl" />
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  : users.map((user) => (
+                      <TableRow key={user.id}>
+                        <TableCell className="font-medium">{user.name}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {user.email}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              user.role === 'admin' ? 'default' : 'secondary'
+                            }
+                          >
+                            {user.role}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
               </TableBody>
             </Table>
           )}
