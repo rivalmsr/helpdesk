@@ -15,7 +15,7 @@ All commands run from the repo root using Bun workspaces (`client`, `server`).
 - `bun build` — build both workspaces
 - `bun --filter client lint` — lint the client with oxlint (server has no lint script yet)
 
-No test suite exists yet in either workspace.
+Playwright is set up for end-to-end tests (see Testing below), but no test specs have been written yet. No unit/integration test suite exists in either workspace.
 
 `bun --filter server build` currently fails with `error TS2688: Cannot find type definition file for 'bun-types'` — this is a pre-existing issue unrelated to Prisma; `bun --watch` (used in dev) is unaffected since it doesn't type-check.
 
@@ -56,14 +56,26 @@ Prisma 7 + PostgreSQL, scoped entirely to `server/`:
 
 Better Auth, email/password only, with self-serve sign-up disabled — the only way to create a user is the seed script.
 
-- `server/src/lib/auth.ts` — shared `betterAuth()` instance. `emailAndPassword: { enabled: true, disableSignUp: true }`. `trustedOrigins` defaults to `http://localhost:5173` via `CLIENT_ORIGIN` env var (not currently set in `server/.env`, so it's running on the default). Adds a required `role` field (`admin` | `agent`) to the user via `user.additionalFields`, with `input: false` — it can't be set through any auth API call, only written directly via Prisma (e.g. the seed script).
-- `server/src/index.ts` — mounts the handler at `app.all("/api/auth/*", toNodeHandler(auth))`. This must be registered **before** `express.json()`, since Better Auth parses its own request body; adding `express.json()` earlier would break auth requests.
+- `server/src/lib/auth.ts` — shared `betterAuth()` instance. `emailAndPassword: { enabled: true, disableSignUp: true }`. `trustedOrigins` defaults to `http://localhost:5173` via `CLIENT_ORIGIN` env var (not currently set in `server/.env`, so it's running on the default). Adds a required `role` field (`admin` | `agent`) to the user via `user.additionalFields`, with `input: false` — it can't be set through any auth API call, only written directly via Prisma (e.g. the seed script). The column is a Prisma `Role` enum (`admin` | `agent`) in `schema.prisma`.
+- `server/src/lib/authorize.ts` — Express middleware for **server-side** authorization: `requireRole(...roles)` re-derives the session from the request cookies via `auth.api.getSession` (never trusts a client-supplied role), returns `401` if unauthenticated / `403` if the role doesn't match, and attaches the session to `req.session` (typed via a `declare global` augmentation of `Express.Request`). `requireAuth` is `requireRole()` with no roles (any authenticated user).
+- `server/src/index.ts` — mounts the auth handler at `app.all("/api/auth/*", toNodeHandler(auth))`. This must be registered **before** `express.json()`, since Better Auth parses its own request body; adding `express.json()` earlier would break auth requests. Also exposes `GET /api/users`, guarded by `requireRole("admin")`, returning `{ id, name, email, role }` for all users.
 - Data model: `User`, `Session`, `Account`, `Verification` in `server/prisma/schema.prisma`, matching Better Auth's expected shape and `@@map`-ed to lowercase table names. `Account` holds the hashed password for the `credential` provider (`providerId: "credential"`).
-- `server/prisma/seed.ts` (run with `bun run seed` from `server/`) creates a single admin user directly through Prisma — hashes `ADMIN_PASSWORD` with `hashPassword` from `better-auth/crypto` and creates matching `User` (`role: admin`) and `Account` (`providerId: "credential"`) rows. Requires `ADMIN_EMAIL`/`ADMIN_PASSWORD` in `server/.env`; no-ops if a user with that email already exists.
-- Required `server/.env` vars for auth: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (all gitignored, not committed).
-- `client/src/lib/auth-client.ts` — `createAuthClient()` from `better-auth/react` with no `baseURL`, so it relies on same-origin requests through the Vite `/api` proxy (see Commands above). Exports `useSession`, `signIn`, `signOut`.
-- `client/src/App.tsx` — client-side route guarding: `useSession()` gates `/` vs `/login` with `<Navigate>` redirects (no server-side/route-loader protection). `client/src/components/NavBar.tsx` reads `session.user.name` and calls `signOut()`.
+- `server/prisma/seed.ts` (run with `bun run seed` from `server/`) seeds users directly through Prisma via a `seedUser({ name, email, password, role })` helper — hashes the password with `hashPassword` from `better-auth/crypto` and creates matching `User` + `Account` (`providerId: "credential"`) rows, no-op if the email already exists. Always seeds an admin from `ADMIN_EMAIL`/`ADMIN_PASSWORD` (required); **also** seeds an agent when `AGENT_EMAIL`/`AGENT_PASSWORD` are set (optional).
+- Required `server/.env` vars for auth: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`; optional `AGENT_EMAIL`/`AGENT_PASSWORD` to also seed an agent (all gitignored, not committed).
+- `client/src/lib/auth-client.ts` — `createAuthClient()` from `better-auth/react` with no `baseURL`, so it relies on same-origin requests through the Vite `/api` proxy (see Commands above). Uses the `inferAdditionalFields<typeof auth>()` plugin so `session.user.role` is typed. Exports `useSession`, `signIn`, `signOut`, plus the `ROLES` tuple and `Role` type.
+- `client/src/App.tsx` — client-side routing with `react-router` (`BrowserRouter`/`Routes`/`Route`). A `ProtectedRoute` component redirects to `/login` when unauthenticated and to `/` when an optional `role` prop doesn't match `session.user.role`; routes are `/` (`HomePage`), `/login`, and `/users` (`UsersPage`, admin-only), with `*` → `/`. This is client-side guarding only (no route-loader protection) — the API is separately enforced by `requireRole` (above). `client/src/components/NavBar.tsx` reads `session.user.name`, calls `signOut()`, and shows a Users link only when `session.user.role === 'admin'`.
 - `@better-auth/cli` (server devDependency) was used to scaffold the Better Auth Prisma schema/migrations initially; you generally won't need to run it again unless adding new Better Auth plugins that require schema changes.
+
+## Testing (E2E)
+
+Playwright is configured at the repo root (E2E spans both workspaces), running against a **separate test database** so runs never touch dev data. No specs are written yet — this is setup/config only.
+
+- `playwright.config.ts` (root) — `testDir: ./e2e`, `testMatch: **/*.spec.ts`, HTML reporter, chromium project. `baseURL` is `http://localhost:5173`.
+- `webServer` boots the real app against the test DB: it starts `bun --filter server dev` and `bun --filter client dev` on the normal dev ports (3001/5173), waiting on `/api/health` and the client URL. The server child gets `DATABASE_URL` overridden to the test DB (read from `server/.env.test`) plus `NODE_ENV=test`; **all other config (BETTER_AUTH_*, trusted origins) still comes from `server/.env`** via Bun's auto env-loading, so auth works unchanged. Only the database differs.
+- Because ports match dev, `reuseExistingServer` is `false` — **stop `bun dev` before running E2E**, otherwise the port is taken (fails loud; never silently reuses the dev-database server).
+- `e2e/global-setup.ts` — runs once before tests: `prisma migrate deploy` (creates the DB if missing) then `bun prisma/seed.ts`, both with the test env from `server/.env.test`. Seeds the same admin + agent users as dev.
+- `server/.env.test` — single source of truth for the test environment: test `DATABASE_URL` (e.g. a `helpdesk_test` database) + `ADMIN_*`/`AGENT_*` seed credentials. Gitignored; commit-tracked template is `server/.env.test.example`. Keep the test DB name distinct from the dev DB.
+- Commands (from root): `bun test:e2e`, `bun test:e2e:ui`, `bun test:e2e:report`. First-time setup: `bunx playwright install chromium` (browsers aren't committed).
 
 ## Fetching library documentation
 
