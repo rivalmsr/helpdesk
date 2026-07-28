@@ -15,7 +15,7 @@ All commands run from the repo root using Bun workspaces (`client`, `server`).
 - `bun build` — build both workspaces
 - `bun --filter client lint` — lint the client with oxlint (server has no lint script yet)
 
-Playwright is set up for end-to-end tests (see Testing below), but no test specs have been written yet. No unit/integration test suite exists in either workspace.
+Playwright is set up for end-to-end tests (see Testing below), but no test specs have been written yet. No unit/integration test suite exists in either workspace. When writing or running E2E tests, use the `e2e-test-writer` subagent (`.claude/agents/e2e-test-writer.md`) — it holds the detailed conventions and harness wiring.
 
 `bun --filter server build` currently fails with `error TS2688: Cannot find type definition file for 'bun-types'` — this is a pre-existing issue unrelated to Prisma; `bun --watch` (used in dev) is unaffected since it doesn't type-check.
 
@@ -68,14 +68,14 @@ Better Auth, email/password only, with self-serve sign-up disabled — the only 
 
 ## Testing (E2E)
 
-Playwright is configured at the repo root (E2E spans both workspaces), running against a **separate test database** so runs never touch dev data. No specs are written yet — this is setup/config only.
+Playwright is configured at the repo root, running against a **separate test database** so runs never touch dev data.
 
-- `playwright.config.ts` (root) — `testDir: ./e2e`, `testMatch: **/*.spec.ts`, HTML reporter, chromium project. `baseURL` is `http://localhost:5173`.
-- `webServer` boots the real app against the test DB: it starts `bun --filter server dev` and `bun --filter client dev` on the normal dev ports (3001/5173), waiting on `/api/health` and the client URL. The server child gets `DATABASE_URL` overridden to the test DB (read from `server/.env.test`) plus `NODE_ENV=test`; **all other config (BETTER_AUTH_*, trusted origins) still comes from `server/.env`** via Bun's auto env-loading, so auth works unchanged. Only the database differs.
-- Because ports match dev, `reuseExistingServer` is `false` — **stop `bun dev` before running E2E**, otherwise the port is taken (fails loud; never silently reuses the dev-database server).
-- `e2e/global-setup.ts` — runs once before tests: `prisma migrate deploy` (creates the DB if missing) then `bun prisma/seed.ts`, both with the test env from `server/.env.test`. Seeds the same admin + agent users as dev.
-- `server/.env.test` — single source of truth for the test environment: test `DATABASE_URL` (e.g. a `helpdesk_test` database) + `ADMIN_*`/`AGENT_*` seed credentials. Gitignored; commit-tracked template is `server/.env.test.example`. Keep the test DB name distinct from the dev DB.
-- Commands (from root): `bun test:e2e`, `bun test:e2e:ui`, `bun test:e2e:report`. First-time setup: `bunx playwright install chromium` (browsers aren't committed).
+**Always write or update E2E specs through the `e2e-test-writer` subagent** (`.claude/agents/e2e-test-writer.md`) — launch it via the Agent tool (`subagent_type: "e2e-test-writer"`) whenever the task involves adding, changing, or debugging tests in `e2e/`. It owns the detailed conventions (locator strategy, seeded users, parallel-safe specs) and the harness wiring, so don't hand-write specs in the main thread or duplicate those details here. Key facts to know without opening it:
+
+- Config is `playwright.config.ts` (root); specs go in `e2e/`; `baseURL` is `http://localhost:5173`.
+- Runs boot the real client + server against the test DB; `reuseExistingServer` is `false`, so **stop `bun dev` before running E2E** or the ports collide.
+- `server/.env.test` (gitignored; template `server/.env.test.example`) holds the test `DATABASE_URL` + seed credentials; `e2e/global-setup.ts` migrates and seeds that DB once before tests.
+- Commands (from root): `bun test:e2e`, `bun test:e2e:ui`, `bun test:e2e:report`. First-time setup: `bunx playwright install chromium`.
 
 ## Fetching library documentation
 
