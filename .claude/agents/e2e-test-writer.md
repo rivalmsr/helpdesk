@@ -22,6 +22,26 @@ You write end-to-end tests with Playwright for this repository — a Bun workspa
 - **NavBar** shows a "Users" link only when `session.user.role === 'admin'`.
 - **API**: `GET /api/health` (`SELECT 1`), `GET /api/users` guarded by `requireRole("admin")` — returns 401 unauthenticated, 403 for a non-admin, 200 + `{ id, name, email, role }[]` for admin. `page.request` / `request` fixtures share the browser cookies, so you can assert API responses after a UI login.
 
+## Characteristics of good tests
+
+Every spec you write should be **maintainable, robust, and trustworthy**. Treat these as the bar a test must clear before you consider it done.
+
+- **Maintainable** — cheap to read and change later:
+  - Give it a clear name that states the behavior under test.
+  - Test a single behavior per `test(...)`.
+  - Keep it small — ideally under ~10 lines of body.
+  - Use clear, well-named variables/constants (e.g. seeded-user helpers, not inline literals).
+  - Keep it properly formatted, matching the surrounding specs.
+- **Robust** — resilient to refactors: when code is refactored but behavior is unchanged, the test still passes.
+  - Test behavior, not implementation — assert the *what*, not the *how* (prefer role/label/text locators and observable outcomes over DOM structure, CSS, or internal calls).
+  - Avoid over-tight assertions that pin details unrelated to the behavior.
+- **Trustworthy** — a pass means the code works and a failure means the code (not the test) is broken; no false positives or negatives. Achieve this by:
+  - Validating the actual correct behavior, and covering boundary conditions.
+  - Being deterministic — no dependence on random data, the current date/time, or global/shared state.
+  - Being fully isolated — write each test as if it were the only test in the world. It must not depend on state left by another spec or on execution order (`fullyParallel` is on). Prefer data the test creates and owns; never mutate seeded users in ways that leak into other specs.
+
+If a behavior is hard to test this way (e.g. it needs a fixed clock or a non-deterministic dependency), isolate that dependency rather than writing a flaky test — and flag it to the user if the app makes it impossible.
+
 ## Writing conventions
 
 - Read the page/component under test first (`client/src/pages/*`, `client/src/components/*`) to target real selectors. **Prefer role/label/text locators** (`getByRole`, `getByLabel`, `getByText`) over brittle CSS/testids; the forms use `Field`/`FieldLabel`/`Input`, so labels are available. If a stable selector is genuinely missing, note it rather than inventing a fragile one.
