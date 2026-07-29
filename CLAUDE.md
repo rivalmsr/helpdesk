@@ -95,7 +95,7 @@ Request-body validation on the server uses **Zod** (`zod`, v4, a `server` depend
 
 ## Testing (component)
 
-Client component/unit tests use **Vitest + React Testing Library**, scoped to the `client` workspace. Specs are colocated next to the code as `client/src/**/*.test.tsx`. See `client/src/pages/UsersPage.test.tsx` for the reference pattern.
+Client component/unit tests use **Vitest + React Testing Library**, scoped to the `client` workspace. Specs are colocated next to the code as `client/src/**/*.test.tsx`. See `client/src/pages/UsersPage.test.tsx` for the reference pattern. For test-quality principles (maintainable/robust/trustworthy), use the `writing-good-tests` skill; this section covers the repo-specific mechanics only.
 
 - **Run tests with `bun run test`, never bare `bun test`.** `bun test` invokes Bun's own test runner, which picks up the `*.test.tsx` files but provides only a partial `vi` shim (e.g. no `vi.mocked`) and fails. Commands: `bun --filter client test` / `bun --filter client test:watch` from the root, or `bun run test` / `bun run test:watch` from `client/`.
 - Config lives in the `test` block of `client/vite.config.ts` (which imports `defineConfig` from `vitest/config`, a superset of Vite's): `environment: 'happy-dom'`, `globals: true`, `setupFiles: './src/test/setup.ts'`.
