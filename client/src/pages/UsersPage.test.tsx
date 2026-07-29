@@ -1,4 +1,5 @@
 import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import axios from 'axios'
 import { renderWithQueryClient } from '@/test/render'
 import UsersPage from './UsersPage'
@@ -106,5 +107,76 @@ describe('UsersPage', () => {
 
     expect(await screen.findByText('Failed to load users')).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  })
+
+  describe('the New user dialog', () => {
+    // Opens the dialog via the trigger button and returns the dialog element.
+    const openDialog = async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.click(screen.getByRole('button', { name: /new user/i }))
+      return screen.findByRole('dialog')
+    }
+
+    it('opens when the New user button is clicked', async () => {
+      mockedGet.mockResolvedValue({ data: users })
+      const user = userEvent.setup()
+
+      renderPage()
+
+      // Nothing is rendered until the trigger is clicked.
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+      const dialog = await openDialog(user)
+      expect(dialog).toBeInTheDocument()
+      // The description is unique to the dialog (the "New user" text is shared
+      // with the trigger button), so assert on it to confirm the content shows.
+      expect(
+        within(dialog).getByText('Create a new agent account for the helpdesk.'),
+      ).toBeInTheDocument()
+    })
+
+    it('closes when the Escape key is pressed', async () => {
+      mockedGet.mockResolvedValue({ data: users })
+      const user = userEvent.setup()
+
+      renderPage()
+
+      await openDialog(user)
+      await user.keyboard('{Escape}')
+
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+      )
+    })
+
+    it('closes when clicking outside the dialog (the backdrop)', async () => {
+      mockedGet.mockResolvedValue({ data: users })
+      const user = userEvent.setup()
+
+      renderPage()
+
+      await openDialog(user)
+
+      const backdrop = document.querySelector('[data-slot="dialog-overlay"]')
+      expect(backdrop).not.toBeNull()
+      await user.click(backdrop!)
+
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+      )
+    })
+
+    it('closes when the close button is clicked', async () => {
+      mockedGet.mockResolvedValue({ data: users })
+      const user = userEvent.setup()
+
+      renderPage()
+
+      const dialog = await openDialog(user)
+      await user.click(within(dialog).getByRole('button', { name: /close/i }))
+
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+      )
+    })
   })
 })
