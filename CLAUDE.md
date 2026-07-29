@@ -23,12 +23,22 @@ Ports: client dev server on `5173`, API server on `3001`. The Vite dev server pr
 
 ## Architecture
 
-Bun workspace monorepo with two packages:
+Bun workspace monorepo with three packages:
 
 - `server/` — Express + TypeScript, run directly with `bun --watch` in dev (no build step needed locally; `tsc` is only used for the production `build`/`start` scripts). Entry point `server/src/index.ts`.
 - `client/` — React 19 + TypeScript, scaffolded with Vite, styled with Tailwind CSS v4 (via the `@tailwindcss/vite` plugin, imported in `client/src/index.css` with `@import "tailwindcss"`).
+- `core/` — framework-agnostic code shared between `client` and `server` (see Shared code below).
 
-The two packages are independently deployable but developed together; the root `package.json` has no source of its own, only orchestration scripts.
+`client` and `server` are independently deployable but developed together; the root `package.json` has no source of its own, only orchestration scripts.
+
+## Shared code (`core` package)
+
+`core/` is the workspace package for anything that must stay identical on both the client and the server — currently the Zod schemas used for both server request validation and client form validation (the single source of truth; don't redefine a schema in `client`/`server` that also exists in `core`).
+
+- Import it as the bare package name: `import { createUserSchema, type CreateUserInput } from "core"`. Both `client` and `server` depend on it via `"core": "workspace:*"`.
+- It ships its **TypeScript source directly, with no build step** — `core/package.json` `exports` points `.` at `src/index.ts`. This works because both consumers use `moduleResolution: "bundler"` (Bun runs the server's TS, Vite bundles the client's), matching how the rest of the repo runs TS in dev. Adding a new export needs no generate/build step — just import it.
+- Keep it **framework-agnostic and dependency-light**: schemas, shared types, constants only. No React/Express/Prisma imports; `zod` is its one dependency. Anything that pulls in a runtime-specific dep does not belong here.
+- Adding a brand-new workspace dependency (a new package, or a new `workspace:*` link) requires `bun install` from the repo root to re-link `node_modules`.
 
 ## UI components (client)
 
@@ -67,7 +77,7 @@ Better Auth, email/password only, with self-serve sign-up disabled — the only 
 
 - `server/src/lib/auth.ts` — shared `betterAuth()` instance. `emailAndPassword: { enabled: true, disableSignUp: true }`. `trustedOrigins` defaults to `http://localhost:5173` via `CLIENT_ORIGIN` env var (not currently set in `server/.env`, so it's running on the default). Adds a required `role` field (`admin` | `agent`) to the user via `user.additionalFields`, with `input: false` — it can't be set through any auth API call, only written directly via Prisma (e.g. the seed script). The column is a Prisma `Role` enum (`admin` | `agent`) in `schema.prisma`.
 - `server/src/lib/authorize.ts` — Express middleware for **server-side** authorization: `requireRole(...roles)` re-derives the session from the request cookies via `auth.api.getSession` (never trusts a client-supplied role), returns `401` if unauthenticated / `403` if the role doesn't match, and attaches the session to `req.session` (typed via a `declare global` augmentation of `Express.Request`). `requireAuth` is `requireRole()` with no roles (any authenticated user).
-- `server/src/index.ts` — mounts the auth handler at `app.all("/api/auth/*splat", toNodeHandler(auth))`. The `*splat` named wildcard is Express 5 / path-to-regexp v8 syntax (a bare `*` is no longer a valid route pattern). This must be registered **before** `express.json()`, since Better Auth parses its own request body; adding `express.json()` earlier would break auth requests. Also exposes `GET /api/users`, guarded by `requireRole("admin")`, returning `{ id, name, email, role }` for all users.
+- `server/src/index.ts` — mounts the auth handler at `app.all("/api/auth/*splat", toNodeHandler(auth))`. The `*splat` named wildcard is Express 5 / path-to-regexp v8 syntax (a bare `*` is no longer a valid route pattern). This must be registered **before** `express.json()`, since Better Auth parses its own request body; adding `express.json()` earlier would break auth requests. The user-domain endpoints (`GET`/`POST /api/users`, both `requireRole("admin")`) live in their own Express `Router` at `server/src/routes/users.ts`, mounted via `app.use("/api/users", usersRouter)`.
 - Data model: `User`, `Session`, `Account`, `Verification` in `server/prisma/schema.prisma`, matching Better Auth's expected shape and `@@map`-ed to lowercase table names. `Account` holds the hashed password for the `credential` provider (`providerId: "credential"`).
 - `server/prisma/seed.ts` (run with `bun run seed` from `server/`) seeds users directly through Prisma via a `seedUser({ name, email, password, role })` helper — hashes the password with `hashPassword` from `better-auth/crypto` and creates matching `User` + `Account` (`providerId: "credential"`) rows, no-op if the email already exists. Always seeds an admin from `ADMIN_EMAIL`/`ADMIN_PASSWORD` (required); **also** seeds an agent when `AGENT_EMAIL`/`AGENT_PASSWORD` are set (optional).
 - Required `server/.env` vars for auth: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`; optional `AGENT_EMAIL`/`AGENT_PASSWORD` to also seed an agent (all gitignored, not committed).
@@ -79,7 +89,7 @@ Better Auth, email/password only, with self-serve sign-up disabled — the only 
 
 Request-body validation on the server uses **Zod** (`zod`, v4, a `server` dependency) — validate untrusted input with a schema, not hand-rolled `typeof`/regex checks.
 
-- Define a schema per route with `z.object({...})` and validate via `schema.safeParse(req.body)`. On failure, return `400` with the first issue's message: `res.status(400).json({ error: parsed.error.issues[0].message })`, then use the typed `parsed.data`. See the `createUserSchema` on `POST /api/users` in `server/src/index.ts` for the reference pattern.
+- Define a schema with `z.object({...})` and validate via `schema.safeParse(req.body)`. On failure, return `400` with the first issue's message: `res.status(400).json({ error: parsed.error.issues[0].message })`, then use the typed `parsed.data`. See `POST /api/users` in `server/src/routes/users.ts` for the reference pattern; its `createUserSchema` lives in the `core` package (shared with the client — see Shared code above), which is where a schema belongs whenever the client validates the same shape.
 - The `{ error: "<message>" }` single-string shape is the contract the client relies on (e.g. `CreateUserDialog` reads `error.response?.data?.error`) — keep it; don't return Zod's raw `flatten()`/`issues` array.
 - Use Zod 4 APIs: top-level string formats like `z.email(msg)` (not the deprecated `z.string().email()`), and `.trim()` before format checks (e.g. `z.string().trim().pipe(z.email(msg))`) to match how fields were trimmed previously. Pass a custom message to each validator so the response stays user-friendly; non-string/missing fields fall back to Zod's default `"Invalid input: ..."` message.
 

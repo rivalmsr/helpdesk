@@ -4,6 +4,7 @@ import type { Role } from '@/lib/auth-client'
 import { Badge } from '@/components/ui/badge'
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -18,6 +19,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
+import CreateUserDialog from '@/components/CreateUserDialog'
 
 type User = {
   id: string
@@ -48,6 +50,9 @@ function UsersPage() {
             Users
           </CardTitle>
           <CardDescription>Everyone with access to the helpdesk.</CardDescription>
+          <CardAction>
+            <CreateUserDialog />
+          </CardAction>
         </CardHeader>
         <CardContent>
           {isError && (
@@ -68,35 +73,35 @@ function UsersPage() {
               <TableBody>
                 {isPending
                   ? Array.from({ length: 3 }).map((_, i) => (
-                      <TableRow key={i}>
-                        <TableCell>
-                          <Skeleton className="h-4 w-24" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-4 w-40" />
-                        </TableCell>
-                        <TableCell>
-                          <Skeleton className="h-5 w-14 rounded-4xl" />
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    <TableRow key={i}>
+                      <TableCell>
+                        <Skeleton className="h-4 w-24" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-4 w-40" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-5 w-14 rounded-4xl" />
+                      </TableCell>
+                    </TableRow>
+                  ))
                   : users.map((user) => (
-                      <TableRow key={user.id}>
-                        <TableCell className="font-medium">{user.name}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {user.email}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              user.role === 'admin' ? 'default' : 'secondary'
-                            }
-                          >
-                            {user.role}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    <TableRow key={user.id}>
+                      <TableCell className="font-medium">{user.name}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {user.email}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            user.role === 'admin' ? 'default' : 'secondary'
+                          }
+                        >
+                          {user.role}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
               </TableBody>
             </Table>
           )}
