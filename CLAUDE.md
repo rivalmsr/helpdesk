@@ -75,6 +75,14 @@ Better Auth, email/password only, with self-serve sign-up disabled — the only 
 - `client/src/App.tsx` — client-side routing with `react-router` (`BrowserRouter`/`Routes`/`Route`). A `ProtectedRoute` component redirects to `/login` when unauthenticated and to `/` when an optional `role` prop doesn't match `session.user.role`; routes are `/` (`HomePage`), `/login`, and `/users` (`UsersPage`, admin-only), with `*` → `/`. This is client-side guarding only (no route-loader protection) — the API is separately enforced by `requireRole` (above). `client/src/components/NavBar.tsx` reads `session.user.name`, calls `signOut()`, and shows a Users link only when `session.user.role === 'admin'`.
 - `@better-auth/cli` (server devDependency) was used to scaffold the Better Auth Prisma schema/migrations initially; you generally won't need to run it again unless adding new Better Auth plugins that require schema changes.
 
+## Validation (server)
+
+Request-body validation on the server uses **Zod** (`zod`, v4, a `server` dependency) — validate untrusted input with a schema, not hand-rolled `typeof`/regex checks.
+
+- Define a schema per route with `z.object({...})` and validate via `schema.safeParse(req.body)`. On failure, return `400` with the first issue's message: `res.status(400).json({ error: parsed.error.issues[0].message })`, then use the typed `parsed.data`. See the `createUserSchema` on `POST /api/users` in `server/src/index.ts` for the reference pattern.
+- The `{ error: "<message>" }` single-string shape is the contract the client relies on (e.g. `CreateUserDialog` reads `error.response?.data?.error`) — keep it; don't return Zod's raw `flatten()`/`issues` array.
+- Use Zod 4 APIs: top-level string formats like `z.email(msg)` (not the deprecated `z.string().email()`), and `.trim()` before format checks (e.g. `z.string().trim().pipe(z.email(msg))`) to match how fields were trimmed previously. Pass a custom message to each validator so the response stays user-friendly; non-string/missing fields fall back to Zod's default `"Invalid input: ..."` message.
+
 ## Testing (component)
 
 Client component/unit tests use **Vitest + React Testing Library**, scoped to the `client` workspace. Specs are colocated next to the code as `client/src/**/*.test.tsx`. See `client/src/pages/UsersPage.test.tsx` for the reference pattern.
