@@ -10,7 +10,7 @@ function AuthedLayout({ children }: { children: ReactNode }) {
   return (
     <>
       <NavBar />
-      <main className="mx-auto w-full max-w-7xl px-4 py-4">{children}</main>
+      <main className="mx-auto w-full max-w-6xl px-4 py-4">{children}</main>
     </>
   )
 }
