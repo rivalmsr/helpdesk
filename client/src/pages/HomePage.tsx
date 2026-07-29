@@ -23,7 +23,7 @@ function HomePage() {
   }
 
   return (
-    <main className="mx-auto max-w-md p-4 text-center">
+    <div className="text-center">
       <h1 className="text-2xl font-semibold">Helpdesk</h1>
       <Button type="button" onClick={checkHealth} className="mt-4">
         Check API health
@@ -34,7 +34,7 @@ function HomePage() {
         </pre>
       )}
       {error && <p className="mt-4 text-red-600">{error}</p>}
-    </main>
+    </div>
   )
 }
 

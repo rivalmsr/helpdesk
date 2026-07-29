@@ -43,7 +43,7 @@ function UsersPage() {
   })
 
   return (
-    <main className="mx-auto max-w-2xl p-4">
+    <div>
       <Card>
         <CardHeader>
           <CardTitle role="heading" aria-level={1}>
@@ -107,7 +107,7 @@ function UsersPage() {
           )}
         </CardContent>
       </Card>
-    </main>
+    </div>
   )
 }
 
