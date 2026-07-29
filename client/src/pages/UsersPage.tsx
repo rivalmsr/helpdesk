@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
 import CreateUserDialog from '@/components/CreateUserDialog'
+import EditUserDialog from '@/components/EditUserDialog'
 
 type User = {
   id: string
@@ -76,6 +77,7 @@ function UsersPage() {
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Created</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -93,6 +95,9 @@ function UsersPage() {
                       </TableCell>
                       <TableCell>
                         <Skeleton className="h-4 w-20" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="ml-auto h-8 w-8" />
                       </TableCell>
                     </TableRow>
                   ))
@@ -113,6 +118,9 @@ function UsersPage() {
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {dateFormatter.format(new Date(user.createdAt))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <EditUserDialog user={user} />
                       </TableCell>
                     </TableRow>
                   ))}

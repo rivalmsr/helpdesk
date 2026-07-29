@@ -98,6 +98,17 @@ describe('UsersPage', () => {
     expect(document.querySelector('[data-slot="skeleton"]')).toBeNull()
   })
 
+  it('shows an edit action for each user', async () => {
+    renderWithUsers()
+
+    expect(
+      await screen.findByRole('button', { name: /edit Ada Admin/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /edit Aggie Agent/i }),
+    ).toBeInTheDocument()
+  })
+
   it('shows an empty state when there are no users', async () => {
     renderWithUsers([])
 
