@@ -67,7 +67,7 @@ Better Auth, email/password only, with self-serve sign-up disabled — the only 
 
 - `server/src/lib/auth.ts` — shared `betterAuth()` instance. `emailAndPassword: { enabled: true, disableSignUp: true }`. `trustedOrigins` defaults to `http://localhost:5173` via `CLIENT_ORIGIN` env var (not currently set in `server/.env`, so it's running on the default). Adds a required `role` field (`admin` | `agent`) to the user via `user.additionalFields`, with `input: false` — it can't be set through any auth API call, only written directly via Prisma (e.g. the seed script). The column is a Prisma `Role` enum (`admin` | `agent`) in `schema.prisma`.
 - `server/src/lib/authorize.ts` — Express middleware for **server-side** authorization: `requireRole(...roles)` re-derives the session from the request cookies via `auth.api.getSession` (never trusts a client-supplied role), returns `401` if unauthenticated / `403` if the role doesn't match, and attaches the session to `req.session` (typed via a `declare global` augmentation of `Express.Request`). `requireAuth` is `requireRole()` with no roles (any authenticated user).
-- `server/src/index.ts` — mounts the auth handler at `app.all("/api/auth/*", toNodeHandler(auth))`. This must be registered **before** `express.json()`, since Better Auth parses its own request body; adding `express.json()` earlier would break auth requests. Also exposes `GET /api/users`, guarded by `requireRole("admin")`, returning `{ id, name, email, role }` for all users.
+- `server/src/index.ts` — mounts the auth handler at `app.all("/api/auth/*splat", toNodeHandler(auth))`. The `*splat` named wildcard is Express 5 / path-to-regexp v8 syntax (a bare `*` is no longer a valid route pattern). This must be registered **before** `express.json()`, since Better Auth parses its own request body; adding `express.json()` earlier would break auth requests. Also exposes `GET /api/users`, guarded by `requireRole("admin")`, returning `{ id, name, email, role }` for all users.
 - Data model: `User`, `Session`, `Account`, `Verification` in `server/prisma/schema.prisma`, matching Better Auth's expected shape and `@@map`-ed to lowercase table names. `Account` holds the hashed password for the `credential` provider (`providerId: "credential"`).
 - `server/prisma/seed.ts` (run with `bun run seed` from `server/`) seeds users directly through Prisma via a `seedUser({ name, email, password, role })` helper — hashes the password with `hashPassword` from `better-auth/crypto` and creates matching `User` + `Account` (`providerId: "credential"`) rows, no-op if the email already exists. Always seeds an admin from `ADMIN_EMAIL`/`ADMIN_PASSWORD` (required); **also** seeds an agent when `AGENT_EMAIL`/`AGENT_PASSWORD` are set (optional).
 - Required `server/.env` vars for auth: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`; optional `AGENT_EMAIL`/`AGENT_PASSWORD` to also seed an agent (all gitignored, not committed).
@@ -96,6 +96,18 @@ Playwright is configured at the repo root, running against a **separate test dat
 - `server/.env.test` (gitignored; template `server/.env.test.example`) holds the test `DATABASE_URL` + seed credentials; `e2e/global-setup.ts` migrates and seeds that DB once before tests.
 - Commands (from root): `bun test:e2e`, `bun test:e2e:ui`, `bun test:e2e:report`. First-time setup: `bunx playwright install chromium`.
 
-## Fetching library documentation
+## Fetching library documentation (Context7 MCP)
 
-Use the Context7 MCP tools to pull current docs whenever working with a library/framework in this repo (React, Express, Vite, Tailwind, Bun, or anything added later) instead of relying on training data — resolve the library ID first, then query docs for the specific API in question.
+Use the Context7 MCP tools to pull current docs whenever working with a library/framework in this repo (React, Express, Vite, Tailwind, Bun, Better Auth, Prisma, or anything added later) instead of relying on training data. This matters here because the stack pins specific majors (e.g. **Express 5**, **Prisma 7**, **Tailwind v4**, **React 19**) whose APIs differ from older training-data assumptions.
+
+**Workflow — always two steps, in order:**
+1. `mcp__context7__resolve-library-id` — pass the library name (e.g. `Express`) to get its Context7 ID (e.g. `/expressjs/express`). Skip this only if the user gives an ID in `/org/project` form directly.
+2. `mcp__context7__query-docs` — pass that `libraryId` plus a specific, single-concept `query` (e.g. "Express 5 wildcard route syntax with path-to-regexp v8"), not a vague term. One call per distinct concept.
+
+**Setup / configuration:** Context7 is registered as an MCP server for Claude Code (not an app dependency — it's not in any `package.json`). Manage it with the CLI, not by hand-editing configs:
+- `claude mcp list` — see configured servers and their connection status.
+- `claude mcp get context7` — inspect this server's transport/URL.
+- Add (project scope, shared via a checked-in `.mcp.json`): `claude mcp add --transport http context7 https://mcp.context7.com/mcp --scope project --header "CONTEXT7_API_KEY: <key>"`, or the local stdio form `claude mcp add context7 --scope project -- npx -y @upstash/context7-mcp`. Use `--scope user` for all-projects, or omit `--scope` for local-only.
+- In-session, `/mcp` shows connection state and handles re-auth.
+
+**If a call fails:** the tools may load but calls can fail at runtime with `TypeError: fetch failed` when the environment can't reach `mcp.context7.com` (blocked outbound HTTPS) or the `CONTEXT7_API_KEY` is missing/expired. When that happens, say so explicitly rather than silently falling back — then proceed using best knowledge and lean harder on empirical verification (typecheck, a real runtime/`curl` check) to confirm library behavior. Don't present unavailable docs as if they were consulted.
