@@ -10,9 +10,28 @@ vi.mock('axios', () => ({
 
 const mockedGet = vi.mocked(axios.get)
 
+// Mirror the component's formatter so the expectation is locale/timezone-agnostic.
+const dateFormatter = new Intl.DateTimeFormat(undefined, {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+})
+
 const users = [
-  { id: '1', name: 'Ada Admin', email: 'ada@example.com', role: 'admin' },
-  { id: '2', name: 'Aggie Agent', email: 'aggie@example.com', role: 'agent' },
+  {
+    id: '1',
+    name: 'Ada Admin',
+    email: 'ada@example.com',
+    role: 'admin',
+    createdAt: '2026-01-15T10:00:00.000Z',
+  },
+  {
+    id: '2',
+    name: 'Aggie Agent',
+    email: 'aggie@example.com',
+    role: 'agent',
+    createdAt: '2026-02-20T10:00:00.000Z',
+  },
 ]
 
 const renderPage = () => renderWithQueryClient(<UsersPage />)
@@ -59,6 +78,13 @@ describe('UsersPage', () => {
     expect(within(adminRow).getByText('admin')).toBeInTheDocument()
     const agentRow = screen.getByText('Aggie Agent').closest('tr')!
     expect(within(agentRow).getByText('agent')).toBeInTheDocument()
+
+    // Created date is shown, human-formatted, in the user's row.
+    expect(
+      within(adminRow).getByText(
+        dateFormatter.format(new Date('2026-01-15T10:00:00.000Z')),
+      ),
+    ).toBeInTheDocument()
 
     // Skeletons are gone once data has loaded.
     expect(document.querySelector('[data-slot="skeleton"]')).toBeNull()

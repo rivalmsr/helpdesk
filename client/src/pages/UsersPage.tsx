@@ -26,7 +26,14 @@ type User = {
   name: string
   email: string
   role: Role
+  createdAt: string
 }
+
+const dateFormatter = new Intl.DateTimeFormat(undefined, {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+})
 
 function UsersPage() {
   const {
@@ -68,6 +75,7 @@ function UsersPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Created</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -82,6 +90,9 @@ function UsersPage() {
                       </TableCell>
                       <TableCell>
                         <Skeleton className="h-5 w-14 rounded-4xl" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-4 w-20" />
                       </TableCell>
                     </TableRow>
                   ))
@@ -99,6 +110,9 @@ function UsersPage() {
                         >
                           {user.role}
                         </Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {dateFormatter.format(new Date(user.createdAt))}
                       </TableCell>
                     </TableRow>
                   ))}
