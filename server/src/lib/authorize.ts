@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { fromNodeHeaders } from "better-auth/node";
 import { auth } from "./auth";
-import type { Role } from "../generated/prisma/client";
+import type { Role } from "core";
 
 type Session = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>;
 

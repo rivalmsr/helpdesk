@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
-import type { Role } from '@/lib/auth-client'
+import { ROLE, type Role } from 'core'
 import { Badge } from '@/components/ui/badge'
 import {
   Card,
@@ -21,6 +21,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import CreateUserDialog from '@/components/CreateUserDialog'
 import EditUserDialog from '@/components/EditUserDialog'
+import DeleteUserDialog from '@/components/DeleteUserDialog'
 
 type User = {
   id: string
@@ -110,7 +111,7 @@ function UsersPage() {
                       <TableCell>
                         <Badge
                           variant={
-                            user.role === 'admin' ? 'default' : 'secondary'
+                            user.role === ROLE.admin ? 'default' : 'secondary'
                           }
                         >
                           {user.role}
@@ -120,7 +121,13 @@ function UsersPage() {
                         {dateFormatter.format(new Date(user.createdAt))}
                       </TableCell>
                       <TableCell className="text-right">
-                        <EditUserDialog user={user} />
+                        <div className="flex justify-end gap-1">
+                          <EditUserDialog user={user} />
+                          {/* Admins can't be deleted (also enforced server-side). */}
+                          {user.role !== ROLE.admin && (
+                            <DeleteUserDialog user={user} />
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

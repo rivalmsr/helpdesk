@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export * from "./role";
+
 /**
  * Shared validation schema for creating a user.
  * Used by the server to validate `POST /api/users` request bodies and by the

@@ -1,23 +1,23 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
-import { createUserSchema, updateUserSchema } from "core";
+import { createUserSchema, updateUserSchema, ROLE } from "core";
 import { hashPassword } from "better-auth/crypto";
 import { prisma } from "../lib/prisma";
 import { requireRole } from "../lib/authorize";
 import { parseBody } from "../lib/validate";
-import { Role } from "../generated/prisma/client";
 
 export const usersRouter = Router();
 
-usersRouter.get("/", requireRole("admin"), async (_req, res) => {
+usersRouter.get("/", requireRole(ROLE.admin), async (_req, res) => {
   const users = await prisma.user.findMany({
+    where: { deletedAt: null },
     select: { id: true, name: true, email: true, role: true, createdAt: true },
     orderBy: { name: "asc" },
   });
   res.json(users);
 });
 
-usersRouter.post("/", requireRole("admin"), async (req, res) => {
+usersRouter.post("/", requireRole(ROLE.admin), async (req, res) => {
   const data = parseBody(createUserSchema, req.body, res);
   if (!data) return;
 
@@ -38,7 +38,7 @@ usersRouter.post("/", requireRole("admin"), async (req, res) => {
       name,
       email,
       emailVerified: true,
-      role: Role.agent,
+      role: ROLE.agent,
       accounts: {
         create: {
           id: randomUUID(),
@@ -54,7 +54,7 @@ usersRouter.post("/", requireRole("admin"), async (req, res) => {
   res.status(201).json(user);
 });
 
-usersRouter.patch<{ id: string }>("/:id", requireRole("admin"), async (req, res) => {
+usersRouter.patch<{ id: string }>("/:id", requireRole(ROLE.admin), async (req, res) => {
   const data = parseBody(updateUserSchema, req.body, res);
   if (!data) return;
 
@@ -90,4 +90,29 @@ usersRouter.patch<{ id: string }>("/:id", requireRole("admin"), async (req, res)
   }
 
   res.json(user);
+});
+
+usersRouter.delete<{ id: string }>("/:id", requireRole(ROLE.admin), async (req, res) => {
+  const { id } = req.params;
+
+  const existing = await prisma.user.findUnique({ where: { id } });
+  if (!existing || existing.deletedAt) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  if (existing.role === ROLE.admin) {
+    res.status(403).json({ error: "Admin users cannot be deleted" });
+    return;
+  }
+
+  // Soft delete: flag the row instead of removing it, and revoke any active
+  // sessions so the deleted user is signed out immediately.
+  await prisma.user.update({
+    where: { id },
+    data: { deletedAt: new Date() },
+  });
+  await prisma.session.deleteMany({ where: { userId: id } });
+
+  res.status(204).end();
 });

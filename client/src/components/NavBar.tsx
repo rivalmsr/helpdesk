@@ -1,4 +1,5 @@
 import { Link, NavLink, useNavigate } from 'react-router'
+import { ROLE } from 'core'
 import { useSession, signOut } from '../lib/auth-client'
 
 function NavBar() {
@@ -17,14 +18,13 @@ function NavBar() {
           <Link to="/" className="font-semibold">
             Helpdesk
           </Link>
-          {session?.user.role === 'admin' && (
+          {session?.user.role === ROLE.admin && (
             <NavLink
               to="/users"
               className={({ isActive }) =>
-                `text-sm ${
-                  isActive
-                    ? 'font-medium text-gray-900'
-                    : 'text-gray-600 hover:text-gray-900'
+                `text-sm ${isActive
+                  ? 'font-medium text-gray-900'
+                  : 'text-gray-600 hover:text-gray-900'
                 }`
               }
             >

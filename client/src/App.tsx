@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router'
-import { useSession, type Role } from './lib/auth-client'
+import { ROLE, type Role } from 'core'
+import { useSession } from './lib/auth-client'
 import LoginPage from './pages/LoginPage'
 import HomePage from './pages/HomePage'
 import UsersPage from './pages/UsersPage'
@@ -63,7 +64,7 @@ function AppRoutes() {
       <Route
         path="/users"
         element={
-          <ProtectedRoute role="admin">
+          <ProtectedRoute role={ROLE.admin}>
             <UsersPage />
           </ProtectedRoute>
         }
