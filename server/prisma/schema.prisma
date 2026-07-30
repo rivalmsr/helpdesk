@@ -79,3 +79,50 @@ model Verification {
   @@index([identifier])
   @@map("verification")
 }
+
+model Ticket {
+  id             String          @id
+  subject        String
+  requesterEmail String
+  status         TicketStatus    @default(open)
+  category       TicketCategory  @default(general)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  messages       TicketMessage[]
+
+  @@index([status])
+  @@map("ticket")
+}
+
+enum TicketStatus {
+  open
+  resolved
+  closed
+}
+
+enum TicketCategory {
+  general
+  technical
+  refund
+}
+
+model TicketMessage {
+  id        String            @id
+  ticketId  String
+  ticket    Ticket            @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  type      TicketMessageType @default(inbound)
+  fromEmail String
+  body      String
+  messageId String?           @unique
+  inReplyTo String?
+  createdAt DateTime          @default(now())
+
+  @@index([ticketId])
+  @@map("ticket_message")
+}
+
+enum TicketMessageType {
+  inbound
+  agent_reply
+  ai_draft
+}

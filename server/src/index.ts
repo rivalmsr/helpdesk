@@ -3,6 +3,8 @@ import { toNodeHandler } from "better-auth/node";
 import { prisma } from "./lib/prisma";
 import { auth } from "./lib/auth";
 import { usersRouter } from "./routes/users";
+import { inboundEmailRouter } from "./routes/inbound-email";
+import { ticketsRouter } from "./routes/tickets";
 
 const app = express();
 const port = process.env.PORT ?? 3001;
@@ -23,6 +25,8 @@ app.get("/api/health", async (_req, res) => {
 });
 
 app.use("/api/users", usersRouter);
+app.use("/api/inbound-email", inboundEmailRouter);
+app.use("/api/tickets", ticketsRouter);
 
 app.listen(port, () => {
   console.log(`Server listening on http://localhost:${port}`);
