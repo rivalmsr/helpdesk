@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import axios from 'axios'
 import { renderWithQueryClient } from '@/test/render'
+import { formatDate } from '@/lib/format'
 import UsersPage from './UsersPage'
 
 // UsersPage fetches through axios; mock the module so no real request is made.
@@ -10,13 +11,6 @@ vi.mock('axios', () => ({
 }))
 
 const mockedGet = vi.mocked(axios.get)
-
-// Mirror the component's formatter so the expectation is locale/timezone-agnostic.
-const dateFormatter = new Intl.DateTimeFormat(undefined, {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-})
 
 const users = [
   {
@@ -87,7 +81,7 @@ describe('UsersPage', () => {
   it('formats the created date as a human-friendly date', async () => {
     renderWithUsers()
 
-    const created = dateFormatter.format(new Date('2026-01-15T10:00:00.000Z'))
+    const created = formatDate('2026-01-15T10:00:00.000Z')
     expect(within(await findRow(/Ada Admin/)).getByText(created)).toBeInTheDocument()
   })
 

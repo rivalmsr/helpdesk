@@ -22,6 +22,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import CreateUserDialog from '@/components/CreateUserDialog'
 import EditUserDialog from '@/components/EditUserDialog'
 import DeleteUserDialog from '@/components/DeleteUserDialog'
+import { formatDate } from '@/lib/format'
 
 type User = {
   id: string
@@ -30,12 +31,6 @@ type User = {
   role: Role
   createdAt: string
 }
-
-const dateFormatter = new Intl.DateTimeFormat(undefined, {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-})
 
 function UsersPage() {
   const {
@@ -118,7 +113,7 @@ function UsersPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {dateFormatter.format(new Date(user.createdAt))}
+                        {formatDate(user.createdAt)}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">

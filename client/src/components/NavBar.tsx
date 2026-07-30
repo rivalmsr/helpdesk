@@ -2,6 +2,14 @@ import { Link, NavLink, useNavigate } from 'react-router'
 import { ROLE } from 'core'
 import { useSession, signOut } from '../lib/auth-client'
 
+// Single source of truth for nav link styling. NavLink calls this with its
+// active state, so both links stay visually in sync.
+function navLinkClassName({ isActive }: { isActive: boolean }) {
+  return `text-sm ${
+    isActive ? 'font-medium text-gray-900' : 'text-gray-600 hover:text-gray-900'
+  }`
+}
+
 function NavBar() {
   const { data: session } = useSession()
   const navigate = useNavigate()
@@ -18,16 +26,11 @@ function NavBar() {
           <Link to="/" className="font-semibold">
             Helpdesk
           </Link>
+          <NavLink to="/tickets" className={navLinkClassName}>
+            Tickets
+          </NavLink>
           {session?.user.role === ROLE.admin && (
-            <NavLink
-              to="/users"
-              className={({ isActive }) =>
-                `text-sm ${isActive
-                  ? 'font-medium text-gray-900'
-                  : 'text-gray-600 hover:text-gray-900'
-                }`
-              }
-            >
+            <NavLink to="/users" className={navLinkClassName}>
               Users
             </NavLink>
           )}

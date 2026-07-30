@@ -5,6 +5,7 @@ import { useSession } from './lib/auth-client'
 import LoginPage from './pages/LoginPage'
 import HomePage from './pages/HomePage'
 import UsersPage from './pages/UsersPage'
+import TicketsPage from './pages/TicketsPage'
 import NavBar from './components/NavBar'
 
 function AuthedLayout({ children }: { children: ReactNode }) {
@@ -58,6 +59,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <HomePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/tickets"
+        element={
+          <ProtectedRoute>
+            <TicketsPage />
           </ProtectedRoute>
         }
       />

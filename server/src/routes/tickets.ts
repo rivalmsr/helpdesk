@@ -17,7 +17,7 @@ ticketsRouter.get("/", requireAuth, async (_req, res) => {
       updatedAt: true,
       _count: { select: { messages: true } },
     },
-    orderBy: { updatedAt: "desc" },
+    orderBy: { createdAt: "desc" },
   });
   res.json(tickets);
 });
