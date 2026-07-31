@@ -9,7 +9,8 @@ export const ticketsRouter = Router();
 
 // Any authenticated agent or admin can view the ticket queue. `sort`/`order`
 // query params drive server-side ordering (defaults to newest-first);
-// `status`/`category`/`q` are optional server-side filters (AND-ed together).
+// `status`/`category`/`q` are optional server-side filters (AND-ed together);
+// `page`/`pageSize` paginate. Responds with `{ tickets, total, page, pageSize }`.
 ticketsRouter.get("/", requireAuth, async (req, res) => {
   const query = parseBody(ticketListQuerySchema, req.query, res);
   if (!query) return;
@@ -35,19 +36,29 @@ ticketsRouter.get("/", requireAuth, async (req, res) => {
       : {}),
   };
 
-  const tickets = await prisma.ticket.findMany({
-    where,
-    select: {
-      id: true,
-      subject: true,
-      requesterEmail: true,
-      status: true,
-      category: true,
-      createdAt: true,
-      updatedAt: true,
-      _count: { select: { messages: true } },
-    },
-    orderBy,
-  });
-  res.json(tickets);
+  const { page, pageSize } = query;
+
+  // Fetch the requested page and the total (for page-count) against the same
+  // filter in one round trip.
+  const [tickets, total] = await Promise.all([
+    prisma.ticket.findMany({
+      where,
+      select: {
+        id: true,
+        subject: true,
+        requesterEmail: true,
+        status: true,
+        category: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: { select: { messages: true } },
+      },
+      orderBy,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    prisma.ticket.count({ where }),
+  ]);
+
+  res.json({ tickets, total, page, pageSize });
 });

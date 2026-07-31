@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import {
   createColumnHelper,
@@ -10,13 +10,24 @@ import {
   type SortingState,
 } from '@tanstack/react-table'
 import axios from 'axios'
-import { ArrowDown, ArrowUp, ChevronsUpDown, Search, X } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  ChevronsUpDown,
+  Search,
+  X,
+} from 'lucide-react'
 import {
   TICKET_STATUS,
   TICKET_STATUSES,
   TICKET_CATEGORY,
   TICKET_CATEGORIES,
   TICKET_SORT_FIELD,
+  TICKET_PAGE_SIZE,
   type TicketStatus,
   type TicketCategory,
 } from 'core'
@@ -30,6 +41,13 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { FilterSelect, type FilterOption } from '@/components/FilterSelect'
 import {
   Table,
@@ -60,6 +78,14 @@ type Ticket = {
   createdAt: string
   updatedAt: string
   _count: { messages: number }
+}
+
+// The paginated envelope returned by `GET /api/tickets`.
+type TicketsResponse = {
+  tickets: Ticket[]
+  total: number
+  page: number
+  pageSize: number
 }
 
 // Friendly, human-readable labels for the enum values (see project-scope.md).
@@ -99,6 +125,9 @@ const CATEGORY_OPTIONS: FilterOption<TicketCategory>[] = [
   { value: 'all', label: 'All categories' },
   ...TICKET_CATEGORIES.map((value) => ({ value, label: capitalize(value) })),
 ]
+
+// Page-size choices for the "Rows per page" selector (TICKET_PAGE_SIZE is the default).
+const PAGE_SIZE_OPTIONS = [10, 20, 50]
 
 const columnHelper = createColumnHelper<Ticket>()
 
@@ -171,6 +200,15 @@ function TicketsPage() {
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebouncedValue(search.trim(), 300)
 
+  const [pageSize, setPageSize] = useState<number>(TICKET_PAGE_SIZE)
+
+  // 1-based page. Reset to the first page whenever the sort, a filter, or the
+  // page size changes, so you never land on a now-out-of-range page.
+  const [page, setPage] = useState(1)
+  useEffect(() => {
+    setPage(1)
+  }, [sort, status, category, debouncedSearch, pageSize])
+
   const hasFilters =
     status !== 'all' || category !== 'all' || search.trim() !== ''
 
@@ -180,33 +218,41 @@ function TicketsPage() {
     setSearch('')
   }
 
-  const {
-    data: tickets,
-    isPending,
-    isError,
-  } = useQuery({
-    // Sort + filters are part of the key so any change refetches from the server.
-    queryKey: ['tickets', sort, { status, category, q: debouncedSearch }],
+  const { data, isPending, isError } = useQuery({
+    // Sort + filters + page + pageSize are part of the key so any change refetches.
+    queryKey: [
+      'tickets',
+      sort,
+      { status, category, q: debouncedSearch },
+      page,
+      pageSize,
+    ],
     queryFn: async () => {
-      const res = await axios.get<Ticket[]>('/api/tickets', {
+      const res = await axios.get<TicketsResponse>('/api/tickets', {
         params: {
           sort: sort.id,
           order: sort.desc ? 'desc' : 'asc',
-          // Omit filters that are unset, so the default request stays sort-only.
+          // Omit params at their defaults, so the default request stays sort-only.
           ...(status !== 'all' ? { status } : {}),
           ...(category !== 'all' ? { category } : {}),
           ...(debouncedSearch ? { q: debouncedSearch } : {}),
+          ...(page > 1 ? { page } : {}),
+          ...(pageSize !== TICKET_PAGE_SIZE ? { pageSize } : {}),
         },
       })
       return res.data
     },
-    // Keep the current rows visible while the re-sorted/filtered page loads.
+    // Keep the current rows visible while the re-sorted/filtered/paged load runs.
     placeholderData: keepPreviousData,
     retry: 3,
   })
 
+  const tickets = data?.tickets ?? []
+  const total = data?.total ?? 0
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+
   const table = useReactTable({
-    data: tickets ?? [],
+    data: tickets,
     columns,
     state: { sorting },
     onSortingChange: setSorting,
@@ -271,7 +317,7 @@ function TicketsPage() {
           {isError && (
             <p className="text-sm text-destructive">Failed to load tickets</p>
           )}
-          {!isError && tickets && tickets.length === 0 && (
+          {!isError && !isPending && tickets.length === 0 && (
             <p className="text-sm text-muted-foreground">
               {hasFilters
                 ? 'No tickets match your filters.'
@@ -375,6 +421,83 @@ function TicketsPage() {
                   ))}
               </TableBody>
             </Table>
+          )}
+          {!isError && total > 0 && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">
+                    Rows per page
+                  </span>
+                  <Select
+                    value={String(pageSize)}
+                    onValueChange={(next) => {
+                      if (next) setPageSize(Number(next))
+                    }}
+                  >
+                    <SelectTrigger
+                      size="sm"
+                      className="w-18"
+                      aria-label="Rows per page"
+                    >
+                      <SelectValue>{(v: string | null) => v}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PAGE_SIZE_OPTIONS.map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          {n}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Page {page} of {pageCount} · {total} total
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  aria-label="First page"
+                  disabled={page <= 1}
+                  onClick={() => setPage(1)}
+                >
+                  <ChevronsLeft className="size-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft className="size-4" />
+                  Previous
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= pageCount}
+                  onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                >
+                  Next
+                  <ChevronRight className="size-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  aria-label="Last page"
+                  disabled={page >= pageCount}
+                  onClick={() => setPage(pageCount)}
+                >
+                  <ChevronsRight className="size-4" />
+                </Button>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

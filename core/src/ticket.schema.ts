@@ -34,13 +34,19 @@ export type InboundEmailInput = z.infer<typeof inboundEmailSchema>;
  * `status`/`category`/`q` are optional server-side filters (AND-ed together); `q`
  * is a case-insensitive contains over subject + requester email. The client omits
  * `q` when the search box is empty, so `min(1)` never trips on a blank value.
+ * `page`/`pageSize` drive server-side pagination (`z.coerce` because query params
+ * arrive as strings); both `.default(...)` so a bare request returns the first page.
  */
+export const TICKET_PAGE_SIZE = 10;
+
 export const ticketListQuerySchema = z.object({
   sort: z.enum(TICKET_SORT_FIELDS).default(TICKET_SORT_FIELD.createdAt),
   order: z.enum(["asc", "desc"]).default("desc"),
   status: z.enum(TICKET_STATUSES).optional(),
   category: z.enum(TICKET_CATEGORIES).optional(),
   q: z.string().trim().min(1).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(TICKET_PAGE_SIZE),
 });
 
 export type TicketListQuery = z.infer<typeof ticketListQuerySchema>;

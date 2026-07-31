@@ -36,9 +36,19 @@ const tickets = [
   },
 ]
 
+// Wraps a ticket array in the paginated envelope the API now returns.
+// `total` defaults to the array length (single page); pass a larger value to
+// simulate multiple pages.
+const paginated = (data: typeof tickets, total = data.length) => ({
+  tickets: data,
+  total,
+  page: 1,
+  pageSize: 10,
+})
+
 // Stubs the tickets request with the given payload, then renders the page.
-const renderWithTickets = (data: typeof tickets = tickets) => {
-  mockedGet.mockResolvedValue({ data })
+const renderWithTickets = (data: typeof tickets = tickets, total?: number) => {
+  mockedGet.mockResolvedValue({ data: paginated(data, total) })
   return renderWithQueryClient(<TicketsPage />)
 }
 
@@ -246,8 +256,8 @@ describe('TicketsPage', () => {
   it('shows a filtered-empty message and clears filters', async () => {
     const user = userEvent.setup()
     // Initial load has rows; the filtered request comes back empty.
-    mockedGet.mockResolvedValueOnce({ data: tickets })
-    mockedGet.mockResolvedValue({ data: [] })
+    mockedGet.mockResolvedValueOnce({ data: paginated(tickets) })
+    mockedGet.mockResolvedValue({ data: paginated([], 0) })
     renderWithQueryClient(<TicketsPage />)
     await findRow(/Cannot access dashboard/)
 
@@ -263,6 +273,112 @@ describe('TicketsPage', () => {
     await waitFor(() =>
       expect(mockedGet).toHaveBeenLastCalledWith('/api/tickets', {
         params: { sort: 'createdAt', order: 'desc' },
+      }),
+    )
+  })
+
+  it('shows page info and disables Previous on the first page', async () => {
+    // total 25 with the default pageSize 10 → 3 pages.
+    renderWithTickets(tickets, 25)
+    await findRow(/Cannot access dashboard/)
+
+    expect(screen.getByText('Page 1 of 3 · 25 total')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /previous/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /next/i })).toBeEnabled()
+  })
+
+  it('requests the next page and returns to the first, updating page params', async () => {
+    const user = userEvent.setup()
+    // total 15 with pageSize 10 → 2 pages.
+    renderWithTickets(tickets, 15)
+    await findRow(/Cannot access dashboard/)
+
+    // Next → page 2 appears in the request.
+    await user.click(screen.getByRole('button', { name: /next/i }))
+    await waitFor(() =>
+      expect(mockedGet).toHaveBeenLastCalledWith('/api/tickets', {
+        params: { sort: 'createdAt', order: 'desc', page: 2 },
+      }),
+    )
+    expect(screen.getByText('Page 2 of 2 · 15 total')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /next/i })).toBeDisabled()
+
+    // Previous → back to page 1, which omits the page param.
+    await user.click(screen.getByRole('button', { name: /previous/i }))
+    await waitFor(() =>
+      expect(mockedGet).toHaveBeenLastCalledWith('/api/tickets', {
+        params: { sort: 'createdAt', order: 'desc' },
+      }),
+    )
+  })
+
+  it('jumps to the last page and back to the first', async () => {
+    const user = userEvent.setup()
+    // total 25 with pageSize 10 → 3 pages.
+    renderWithTickets(tickets, 25)
+    await findRow(/Cannot access dashboard/)
+
+    // Last page → page 3 (the final page).
+    await user.click(screen.getByRole('button', { name: /last page/i }))
+    await waitFor(() =>
+      expect(mockedGet).toHaveBeenLastCalledWith('/api/tickets', {
+        params: { sort: 'createdAt', order: 'desc', page: 3 },
+      }),
+    )
+    expect(screen.getByText('Page 3 of 3 · 25 total')).toBeInTheDocument()
+
+    // First page → back to page 1, which omits the page param.
+    await user.click(screen.getByRole('button', { name: /first page/i }))
+    await waitFor(() =>
+      expect(mockedGet).toHaveBeenLastCalledWith('/api/tickets', {
+        params: { sort: 'createdAt', order: 'desc' },
+      }),
+    )
+  })
+
+  it('changes the page size (and resets to the first page)', async () => {
+    const user = userEvent.setup()
+    renderWithTickets(tickets, 25)
+    await findRow(/Cannot access dashboard/)
+
+    // Move off page 1 first, to prove the page-size change resets it.
+    await user.click(screen.getByRole('button', { name: /next/i }))
+    await waitFor(() =>
+      expect(mockedGet).toHaveBeenLastCalledWith('/api/tickets', {
+        params: { sort: 'createdAt', order: 'desc', page: 2 },
+      }),
+    )
+
+    // Pick 50 rows per page → sends pageSize, and page is back to 1 (omitted).
+    await user.click(screen.getByRole('combobox', { name: /rows per page/i }))
+    await user.click(await screen.findByRole('option', { name: '50' }))
+    await waitFor(() =>
+      expect(mockedGet).toHaveBeenLastCalledWith('/api/tickets', {
+        params: { sort: 'createdAt', order: 'desc', pageSize: 50 },
+      }),
+    )
+  })
+
+  it('resets to the first page when a filter changes', async () => {
+    const user = userEvent.setup()
+    renderWithTickets(tickets, 25)
+    await findRow(/Cannot access dashboard/)
+
+    // Go to page 2, then apply a status filter.
+    await user.click(screen.getByRole('button', { name: /next/i }))
+    await waitFor(() =>
+      expect(mockedGet).toHaveBeenLastCalledWith('/api/tickets', {
+        params: { sort: 'createdAt', order: 'desc', page: 2 },
+      }),
+    )
+
+    await user.click(screen.getByRole('combobox', { name: /filter by status/i }))
+    await user.click(await screen.findByRole('option', { name: 'Open' }))
+
+    // The filtered request starts at page 1 again (no page param).
+    await waitFor(() =>
+      expect(mockedGet).toHaveBeenLastCalledWith('/api/tickets', {
+        params: { sort: 'createdAt', order: 'desc', status: 'open' },
       }),
     )
   })

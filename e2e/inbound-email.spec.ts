@@ -10,6 +10,13 @@ type Ticket = {
   _count: { messages: number };
 };
 
+type TicketListResponse = {
+  tickets: Ticket[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
 /**
  * POST /api/inbound-email (server/src/routes/inbound-email.ts): turns a
  * support email into a ticket. Public endpoint guarded by a shared-secret
@@ -34,7 +41,9 @@ test.describe("POST /api/inbound-email", () => {
     const { ticketId, created } = await res.json();
     expect(created).toBe(true);
 
-    const tickets: Ticket[] = await (await page.request.get("/api/tickets")).json();
+    const { tickets }: TicketListResponse = await (
+      await page.request.get("/api/tickets", { params: { pageSize: "100" } })
+    ).json();
     const ticket = tickets.find((t) => t.id === ticketId);
     expect(ticket).toMatchObject({ subject, requesterEmail: from, _count: { messages: 1 } });
   });
@@ -64,7 +73,9 @@ test.describe("POST /api/inbound-email", () => {
     const replyBody = await replyRes.json();
     expect(replyBody).toMatchObject({ ticketId: parentTicketId, created: false });
 
-    const tickets: Ticket[] = await (await page.request.get("/api/tickets")).json();
+    const { tickets }: TicketListResponse = await (
+      await page.request.get("/api/tickets", { params: { pageSize: "100" } })
+    ).json();
     const ticket = tickets.find((t) => t.id === parentTicketId);
     expect(ticket).toMatchObject({ _count: { messages: 2 } });
   });
