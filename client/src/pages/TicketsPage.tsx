@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import {
   createColumnHelper,
@@ -22,9 +23,7 @@ import {
   X,
 } from 'lucide-react'
 import {
-  TICKET_STATUS,
   TICKET_STATUSES,
-  TICKET_CATEGORY,
   TICKET_CATEGORIES,
   TICKET_SORT_FIELD,
   TICKET_PAGE_SIZE,
@@ -60,6 +59,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { formatDate } from '@/lib/format'
+import { STATUS_LABEL, STATUS_VARIANT, CATEGORY_LABEL } from '@/lib/ticketMeta'
 import { useDebouncedValue } from '@/lib/useDebouncedValue'
 
 // Let column defs carry an alignment hint used by the header/cell renderers.
@@ -86,28 +86,6 @@ type TicketsResponse = {
   total: number
   page: number
   pageSize: number
-}
-
-// Friendly, human-readable labels for the enum values (see project-scope.md).
-// Keys reference the `core` constants (the single source of truth) rather than
-// bare strings, so these maps track the enum instead of duplicating it.
-const STATUS_LABEL: Record<TicketStatus, string> = {
-  [TICKET_STATUS.open]: 'Open',
-  [TICKET_STATUS.resolved]: 'Resolved',
-  [TICKET_STATUS.closed]: 'Closed',
-}
-
-const STATUS_VARIANT: Record<TicketStatus, 'default' | 'secondary' | 'outline'> =
-{
-  [TICKET_STATUS.open]: 'default',
-  [TICKET_STATUS.resolved]: 'secondary',
-  [TICKET_STATUS.closed]: 'outline',
-}
-
-const CATEGORY_LABEL: Record<TicketCategory, string> = {
-  [TICKET_CATEGORY.general]: 'General Question',
-  [TICKET_CATEGORY.technical]: 'Technical Question',
-  [TICKET_CATEGORY.refund]: 'Refund Request',
 }
 
 // Short labels for the filter options (the table badges use the fuller labels
@@ -138,7 +116,14 @@ const columns: ColumnDef<Ticket, any>[] = [
   columnHelper.accessor('subject', {
     id: TICKET_SORT_FIELD.subject,
     header: 'Subject',
-    cell: (info) => <span className="font-medium">{info.getValue()}</span>,
+    cell: (info) => (
+      <Link
+        to={`/tickets/${info.row.original.id}`}
+        className="font-medium hover:underline"
+      >
+        {info.getValue()}
+      </Link>
+    ),
   }),
   columnHelper.accessor('requesterEmail', {
     id: TICKET_SORT_FIELD.requesterEmail,

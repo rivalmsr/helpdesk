@@ -28,11 +28,11 @@ ticketsRouter.get("/", requireAuth, async (req, res) => {
     ...(query.category ? { category: query.category } : {}),
     ...(query.q
       ? {
-          OR: [
-            { subject: { contains: query.q, mode: "insensitive" } },
-            { requesterEmail: { contains: query.q, mode: "insensitive" } },
-          ],
-        }
+        OR: [
+          { subject: { contains: query.q, mode: "insensitive" } },
+          { requesterEmail: { contains: query.q, mode: "insensitive" } },
+        ],
+      }
       : {}),
   };
 
@@ -61,4 +61,39 @@ ticketsRouter.get("/", requireAuth, async (req, res) => {
   ]);
 
   res.json({ tickets, total, page, pageSize });
+});
+
+// A single ticket with its full message thread (oldest-first), for the ticket
+// detail page. Any authenticated agent or admin can view it; `404` if unknown.
+ticketsRouter.get<{ id: string }>("/:id", requireAuth, async (req, res) => {
+  const ticket = await prisma.ticket.findUnique({
+    where: { id: req.params.id },
+    select: {
+      id: true,
+      subject: true,
+      requesterEmail: true,
+      status: true,
+      category: true,
+      createdAt: true,
+      updatedAt: true,
+      assignee: { select: { id: true, name: true, email: true } },
+      messages: {
+        select: {
+          id: true,
+          type: true,
+          fromEmail: true,
+          body: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  });
+
+  if (!ticket) {
+    res.status(404).json({ error: "Ticket not found" });
+    return;
+  }
+
+  res.json(ticket);
 });

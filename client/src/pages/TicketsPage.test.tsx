@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import axios from 'axios'
-import { renderWithQueryClient } from '@/test/render'
+import { renderWithProviders } from '@/test/render'
 import { formatDate } from '@/lib/format'
 import TicketsPage from './TicketsPage'
 
@@ -49,7 +49,7 @@ const paginated = (data: typeof tickets, total = data.length) => ({
 // Stubs the tickets request with the given payload, then renders the page.
 const renderWithTickets = (data: typeof tickets = tickets, total?: number) => {
   mockedGet.mockResolvedValue({ data: paginated(data, total) })
-  return renderWithQueryClient(<TicketsPage />)
+  return renderWithProviders(<TicketsPage />)
 }
 
 // Finds a table row by the text it contains (rows expose their cell text as
@@ -75,7 +75,7 @@ describe('TicketsPage', () => {
     // A promise that never resolves keeps the query in its pending state.
     mockedGet.mockReturnValue(new Promise(() => {}))
 
-    const { container } = renderWithQueryClient(<TicketsPage />)
+    const { container } = renderWithProviders(<TicketsPage />)
 
     expect(
       container.querySelectorAll('[data-slot="skeleton"]').length,
@@ -94,6 +94,16 @@ describe('TicketsPage', () => {
     expect(
       within(await findRow(/Refund please/)).getByText('bob@acme.com'),
     ).toBeInTheDocument()
+  })
+
+  it('links each subject to its ticket detail page', async () => {
+    renderWithTickets()
+
+    const link = within(await findRow(/Cannot access dashboard/)).getByRole(
+      'link',
+      { name: 'Cannot access dashboard' },
+    )
+    expect(link).toHaveAttribute('href', '/tickets/1')
   })
 
   it('shows the status as a human-friendly badge', async () => {
@@ -150,7 +160,7 @@ describe('TicketsPage', () => {
   it('shows an error message when the request fails', async () => {
     mockedGet.mockRejectedValue(new Error('boom'))
 
-    renderWithQueryClient(<TicketsPage />)
+    renderWithProviders(<TicketsPage />)
 
     expect(await screen.findByText('Failed to load tickets')).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
@@ -258,7 +268,7 @@ describe('TicketsPage', () => {
     // Initial load has rows; the filtered request comes back empty.
     mockedGet.mockResolvedValueOnce({ data: paginated(tickets) })
     mockedGet.mockResolvedValue({ data: paginated([], 0) })
-    renderWithQueryClient(<TicketsPage />)
+    renderWithProviders(<TicketsPage />)
     await findRow(/Cannot access dashboard/)
 
     await user.click(screen.getByRole('combobox', { name: /filter by status/i }))
