@@ -122,3 +122,93 @@ test.describe("GET /api/tickets sorting", () => {
     expect(ownSubjects).toEqual([busySubject, quietSubject]);
   });
 });
+
+/**
+ * GET /api/tickets (server/src/routes/tickets.ts): `status`/`category`/`q`
+ * query params drive an AND-ed Prisma `where` filter on top of `sort`/`order`.
+ * The DB is shared across parallel specs, so `q` searches are scoped to a
+ * unique run token embedded in the subject (or requester email) rather than
+ * asserting on the full response.
+ */
+test.describe("GET /api/tickets filtering", () => {
+  test("q matches subject case-insensitively and excludes non-matching tickets", async ({ page }) => {
+    await login(page, AGENT);
+    const token = randomUUID();
+    const matchingSubjects = [`${token} printer broken`, `${token} printer jammed`];
+    const nonMatchingSubject = `${token} unrelated billing question`;
+    for (const subject of [...matchingSubjects, nonMatchingSubject]) {
+      const res = await postInboundEmail(page.request, {
+        from: "customer@e2e.test",
+        subject,
+        text: "body",
+        messageId: uniqueMessageId(),
+      });
+      expect(res.status()).toBe(201);
+    }
+
+    const res = await page.request.get("/api/tickets", { params: { q: `${token} printer` } });
+    const tickets: Ticket[] = await res.json();
+    const ownSubjects = tickets.map((t) => t.subject).filter((s) => s.startsWith(token));
+    expect(ownSubjects.sort()).toEqual([...matchingSubjects].sort());
+
+    const upperRes = await page.request.get("/api/tickets", {
+      params: { q: `${token} PRINTER`.toUpperCase() },
+    });
+    const upperTickets: Ticket[] = await upperRes.json();
+    const upperSubjects = upperTickets.map((t) => t.subject).filter((s) => s.startsWith(token));
+    expect(upperSubjects.sort()).toEqual([...matchingSubjects].sort());
+
+    const noneRes = await page.request.get("/api/tickets", {
+      params: { q: `${token} nonexistentterm` },
+    });
+    const noneTickets: Ticket[] = await noneRes.json();
+    expect(noneTickets.filter((t) => t.subject.startsWith(token))).toEqual([]);
+  });
+
+  test("q matches requesterEmail", async ({ page }) => {
+    await login(page, AGENT);
+    const emailToken = randomUUID();
+    const from = `${emailToken}@e2e.test`;
+
+    const res = await postInboundEmail(page.request, {
+      from,
+      subject: "Account access issue",
+      text: "body",
+      messageId: uniqueMessageId(),
+    });
+    expect(res.status()).toBe(201);
+    const { ticketId } = await res.json();
+
+    const searchRes = await page.request.get("/api/tickets", { params: { q: emailToken } });
+    const tickets: Ticket[] = await searchRes.json();
+    expect(tickets.map((t) => t.id)).toEqual([ticketId]);
+  });
+
+  test("status=open returns seeded tickets, which are always created open", async ({ page }) => {
+    await login(page, AGENT);
+    const token = randomUUID();
+    const subject = `${token} status filter check`;
+    const res = await postInboundEmail(page.request, {
+      from: "customer@e2e.test",
+      subject,
+      text: "body",
+      messageId: uniqueMessageId(),
+    });
+    expect(res.status()).toBe(201);
+
+    const openRes = await page.request.get("/api/tickets", { params: { status: "open" } });
+    const openTickets: Ticket[] = await openRes.json();
+    expect(openTickets.some((t) => t.subject === subject)).toBe(true);
+  });
+
+  test("an invalid category value is rejected with 400", async ({ page }) => {
+    await login(page, AGENT);
+
+    const res = await page.request.get("/api/tickets", { params: { category: "bogus" } });
+
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(typeof body.error).toBe("string");
+    expect(body.error.length).toBeGreaterThan(0);
+  });
+});

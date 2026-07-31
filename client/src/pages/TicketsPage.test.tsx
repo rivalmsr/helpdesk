@@ -192,4 +192,78 @@ describe('TicketsPage', () => {
       'none',
     )
   })
+
+  it('filters by status, adding the status query param', async () => {
+    const user = userEvent.setup()
+    renderWithTickets()
+    await findRow(/Cannot access dashboard/)
+
+    // Open the status dropdown and pick "Open" (the table's status Badge, not
+    // an option, shares the text — role: 'option' scopes to the listbox).
+    await user.click(screen.getByRole('combobox', { name: /filter by status/i }))
+    await user.click(await screen.findByRole('option', { name: 'Open' }))
+
+    await waitFor(() =>
+      expect(mockedGet).toHaveBeenLastCalledWith('/api/tickets', {
+        params: { sort: 'createdAt', order: 'desc', status: 'open' },
+      }),
+    )
+  })
+
+  it('filters by category, adding the category query param', async () => {
+    const user = userEvent.setup()
+    renderWithTickets()
+    await findRow(/Cannot access dashboard/)
+
+    await user.click(screen.getByRole('combobox', { name: /filter by category/i }))
+    await user.click(await screen.findByRole('option', { name: 'Technical' }))
+
+    await waitFor(() =>
+      expect(mockedGet).toHaveBeenLastCalledWith('/api/tickets', {
+        params: { sort: 'createdAt', order: 'desc', category: 'technical' },
+      }),
+    )
+  })
+
+  it('searches (debounced) via the q query param', async () => {
+    const user = userEvent.setup()
+    renderWithTickets()
+    await findRow(/Cannot access dashboard/)
+
+    await user.type(
+      screen.getByRole('searchbox', { name: /search tickets/i }),
+      'refund',
+    )
+
+    // Fires once the input settles (debounced), with the trimmed search term.
+    await waitFor(() =>
+      expect(mockedGet).toHaveBeenLastCalledWith('/api/tickets', {
+        params: { sort: 'createdAt', order: 'desc', q: 'refund' },
+      }),
+    )
+  })
+
+  it('shows a filtered-empty message and clears filters', async () => {
+    const user = userEvent.setup()
+    // Initial load has rows; the filtered request comes back empty.
+    mockedGet.mockResolvedValueOnce({ data: tickets })
+    mockedGet.mockResolvedValue({ data: [] })
+    renderWithQueryClient(<TicketsPage />)
+    await findRow(/Cannot access dashboard/)
+
+    await user.click(screen.getByRole('combobox', { name: /filter by status/i }))
+    await user.click(await screen.findByRole('option', { name: 'Closed' }))
+
+    expect(
+      await screen.findByText('No tickets match your filters.'),
+    ).toBeInTheDocument()
+
+    // Clearing returns the request to the default sort-only shape.
+    await user.click(screen.getByRole('button', { name: /clear/i }))
+    await waitFor(() =>
+      expect(mockedGet).toHaveBeenLastCalledWith('/api/tickets', {
+        params: { sort: 'createdAt', order: 'desc' },
+      }),
+    )
+  })
 })
