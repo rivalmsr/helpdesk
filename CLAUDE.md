@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-AI-powered ticket management system. Receives support emails, uses Claude to classify/summarize/suggest replies, and gives agents a dashboard to manage tickets. See `project-scope.md` for feature scope, `tech-stack.md` for the full intended stack, and `implementation-plan.md` for the phased build-out — the codebase currently implements the project scaffolding, authentication (Better Auth email/password with `admin`/`agent` roles), admin user management (CRUD over `/users`), and inbound email ingestion (the `Ticket`/`TicketMessage` model plus a webhook that turns support emails into tickets — see Email ingestion below). The agent-facing ticket UI and the AI features from later phases don't exist yet.
+AI-powered ticket management system: receives support emails, uses Claude to classify/summarize/suggest replies, and gives agents a dashboard to manage tickets. See `project-scope.md` (scope), `tech-stack.md` (intended stack), and `implementation-plan.md` (phased build-out). Implemented so far: project scaffolding, authentication (Better Auth email/password, `admin`/`agent` roles), admin user management (CRUD over `/users`), inbound email ingestion, and the agent-facing ticket UI (list + detail). The AI features (Phase 6 — classification, summaries, suggested replies, knowledge base) don't exist yet.
 
 ## Commands
 
@@ -14,131 +14,129 @@ All commands run from the repo root using Bun workspaces (`client`, `server`).
 - `bun dev:client` / `bun dev:server` — run one side only
 - `bun build` — build both workspaces
 - `bun --filter client lint` — lint the client with oxlint (server has no lint script yet)
+- `bun --filter client test` — client component tests (see Testing); **never bare `bun test`** (that runs Bun's own runner, which lacks `vi.mocked` and fails)
+- `bun test:e2e` — Playwright E2E (see Testing)
 
-Two test suites exist (see Testing below): client component tests (Vitest + React Testing Library, colocated `client/src/**/*.test.tsx`) and Playwright E2E specs in `e2e/`. When writing or running E2E tests, use the `e2e-test-writer` subagent (`.claude/agents/e2e-test-writer.md`) — it holds the detailed conventions and harness wiring.
+`bun --filter server build` currently fails with `error TS2688: Cannot find type definition file for 'bun-types'` — pre-existing, unrelated to Prisma; `bun --watch` (dev) is unaffected since it doesn't type-check.
 
-`bun --filter server build` currently fails with `error TS2688: Cannot find type definition file for 'bun-types'` — this is a pre-existing issue unrelated to Prisma; `bun --watch` (used in dev) is unaffected since it doesn't type-check.
-
-Ports: client dev server on `5173`, API server on `3001`. The Vite dev server proxies `/api/*` to `http://localhost:3001` (see `client/vite.config.ts`), so the client should call the API as same-origin relative paths (e.g. `fetch('/api/health')`), not an absolute `localhost:3001` URL.
+Ports: client `5173`, API `3001`. Vite proxies `/api/*` → `http://localhost:3001` (`client/vite.config.ts`), so call the API with same-origin relative paths (`fetch('/api/health')`), not an absolute URL.
 
 ## Architecture
 
-Bun workspace monorepo with three packages:
+Bun workspace monorepo, three packages:
 
-- `server/` — Express + TypeScript, run directly with `bun --watch` in dev (no build step needed locally; `tsc` is only used for the production `build`/`start` scripts). Entry point `server/src/index.ts`.
-- `client/` — React 19 + TypeScript, scaffolded with Vite, styled with Tailwind CSS v4 (via the `@tailwindcss/vite` plugin, imported in `client/src/index.css` with `@import "tailwindcss"`).
-- `core/` — framework-agnostic code shared between `client` and `server` (see Shared code below).
+- `server/` — Express 5 + TypeScript, run with `bun --watch` in dev (no local build; `tsc` only for the production `build`/`start`). Entry `server/src/index.ts`.
+- `client/` — React 19 + TypeScript (Vite), Tailwind CSS v4 (via `@tailwindcss/vite`, imported in `client/src/index.css` with `@import "tailwindcss"`).
+- `core/` — framework-agnostic code shared by both (see Shared code).
 
-`client` and `server` are independently deployable but developed together; the root `package.json` has no source of its own, only orchestration scripts.
+`client`/`server` are independently deployable but developed together; the root `package.json` is orchestration only.
 
 ## Shared code (`core` package)
 
-`core/` is the workspace package for anything that must stay identical on both the client and the server — currently the Zod schemas used for both server request validation and client form validation, and the user role constants (`core/src/role.ts`: `ROLE` value map, `ROLES` tuple, `Role` type — the single source of truth for roles, mirrored by the Prisma `Role` enum in `server/prisma/schema.prisma`). Don't redefine a schema or the role set in `client`/`server` that also exists in `core`; import `ROLE`/`Role` from `"core"` on both sides (e.g. `requireRole(ROLE.admin)`, `user.role === ROLE.admin`) rather than hardcoding `"admin"`/`"agent"` strings or importing the Prisma-generated `Role`.
+`core/` holds anything that must stay identical on client and server: shared Zod schemas (server request + client form validation), domain enums/constants, and their types. Import as the bare package name (`import { createUserSchema, ROLE, type Role } from "core"`), always from the barrel — never an internal path like `"core/user.schema"`. Both packages depend on it via `"core": "workspace:*"`.
 
-- **Single source of truth — reference `core` constants, never re-type their string values.** When a domain enum/constant lives in `core` (`ROLE`/`Role`, `TICKET_STATUS`/`TICKET_CATEGORY`/`TICKET_MESSAGE_TYPE` and their `TicketStatus`/`TicketCategory`/… types), always import and use the constant — including as **computed object/`Record` keys** — instead of writing the literal string again. So `{ [TICKET_STATUS.open]: 'Open' }`, not `{ open: 'Open' }`; `user.role === ROLE.admin`, not `=== 'admin'`. This holds **even where the literal would still typecheck** — e.g. `Record<TicketStatus, T>` verifies its keys against the union, so `{ open, resolved, closed }` compiles fine. Type-checking prevents silent *drift*, but it still *duplicates* the enum's values in a second place; using the constant keeps exactly one definition, makes the "this mirrors the enum" intent explicit, and auto-follows a value rename. Import only the `type` when you need the type alone; import the value constant (`TICKET_STATUS`) whenever you name one of its members. The reference pattern is the label/variant maps in `client/src/pages/TicketsPage.tsx`. (Fixture/mock string literals in tests are the pragmatic exception — they're type-checked against the field's type and needn't import the constant.)
-- **File layout convention: types vs schemas.** Plain types/constants (dependency-free) live in `<domain>.ts`; Zod validation schemas (which import `zod`) live in `<domain>.schema.ts`. Current files: `role.ts` (role constants), `ticket.ts` (ticket status/category/message-type enums), `user.schema.ts` (`create`/`updateUserSchema`), `ticket.schema.ts` (`inboundEmailSchema`). `index.ts` is a pure barrel re-exporting all of them — add a new file to the matching side and re-export it there. When a domain gains the other kind (e.g. a `ticket.ts` enum plus a `ticket.schema.ts` body validator), keep the two colocated by domain across the two files rather than mixing kinds in one file.
-- Import it as the bare package name: `import { createUserSchema, type CreateUserInput } from "core"`. Both `client` and `server` depend on it via `"core": "workspace:*"`. Consumers import from the barrel, never from the internal file (`"core/user.schema"`), so files can be reorganized without touching call sites.
-- It ships its **TypeScript source directly, with no build step** — `core/package.json` `exports` points `.` at `src/index.ts`. This works because both consumers use `moduleResolution: "bundler"` (Bun runs the server's TS, Vite bundles the client's), matching how the rest of the repo runs TS in dev. Adding a new export needs no generate/build step — just import it.
-- Keep it **framework-agnostic and dependency-light**: schemas, shared types, constants only. No React/Express/Prisma imports; `zod` is its one dependency. Anything that pulls in a runtime-specific dep does not belong here.
-- Adding a brand-new workspace dependency (a new package, or a new `workspace:*` link) requires `bun install` from the repo root to re-link `node_modules`.
+- **Single source of truth — reference `core` constants, never re-type their string values.** For any domain enum/constant in `core` (`ROLE`/`Role`, `TICKET_STATUS`/`TICKET_CATEGORY`/`TICKET_MESSAGE_TYPE`, `TICKET_SORT_FIELD`, and their types), import and use the constant — including as **computed `Record`/object keys** (`{ [TICKET_STATUS.open]: 'Open' }`, `user.role === ROLE.admin`). This holds even where a literal would typecheck (`Record<TicketStatus, T>` checks keys but still *duplicates* the values). Import just the `type` when you only need the type; import the value constant whenever you name a member. Reference pattern: the label/variant maps in `client/src/lib/ticketMeta.ts`. (Test fixture/mock string literals are the pragmatic exception.) These enums mirror the Prisma enums in `server/prisma/schema.prisma` — keep them in sync.
+- **File layout: types vs schemas.** Dependency-free types/constants live in `<domain>.ts`; Zod schemas (which import `zod`) in `<domain>.schema.ts`; `index.ts` is a pure barrel re-exporting both. Current files: `role.ts`, `ticket.ts` (status/category/message-type + sort-field enums), `user.schema.ts` (`create`/`updateUserSchema`), `ticket.schema.ts` (`inboundEmailSchema`, `ticketListQuerySchema`, `TICKET_PAGE_SIZE`). Keep both kinds for one domain colocated across the two files.
+- Ships **TypeScript source directly, no build step** — `exports` points `.` at `src/index.ts`, which works because both consumers use `moduleResolution: "bundler"`. Adding an export needs no generate/build — just import it.
+- Keep it **framework-agnostic and dependency-light**: schemas, types, constants only. No React/Express/Prisma; `zod` is its one dependency.
+- A new workspace dependency (new package or `workspace:*` link) requires `bun install` from the repo root.
 
 ## UI components (client)
 
-`client/` uses shadcn/ui, installed via `bunx shadcn@latest init -d` (the CLI's current default preset). This is the `base-nova` preset: components are built on `@base-ui/react` primitives, not Radix — don't assume Radix APIs when reading or extending `client/src/components/ui/*`.
+shadcn/ui via `bunx shadcn@latest init -d` — the `base-nova` preset, built on `@base-ui/react` primitives (**not Radix** — don't assume Radix APIs in `client/src/components/ui/*`).
 
 - Config: `client/components.json` (base color `neutral`, CSS variables, `lucide-react` icons).
-- Path alias `@/*` → `client/src/*`, wired in `tsconfig.json`/`tsconfig.app.json` (`paths` only — no `baseUrl`, since the TS version here flags `baseUrl` as deprecated) and in `client/vite.config.ts` (`resolve.alias`).
-- Forms use `client/src/components/ui/field.tsx` (`Field`, `FieldLabel`, `FieldError`, `FieldGroup`, etc.), not a `form.tsx`/`FormField` wrapper — this preset has no such component. `FieldError` takes RHF's error object straight from `formState.errors` via an `errors={[errors.foo]}` prop. See `client/src/pages/LoginPage.tsx` for the pattern (`Card` + `FieldGroup` + `Field` + `Input` + `Button`).
-- Theme: default light/dark CSS variables and Chrome autofill override both live in `client/src/index.css`. Font is Geist Variable via `@fontsource-variable/geist`.
-- Add components with `cd client && bunx shadcn@latest add <name>`. Names don't always match classic shadcn (e.g. `form` → `field`) — use `bunx shadcn@latest search @shadcn --query <term>` to check first.
+- Path alias `@/*` → `client/src/*`, wired in `tsconfig.app.json` (`paths`, no `baseUrl`) and `client/vite.config.ts`.
+- Forms use `field.tsx` (`Field`, `FieldLabel`, `FieldError`, `FieldGroup`…), not `form.tsx`/`FormField` (absent in this preset). `FieldError` takes RHF errors via `errors={[errors.foo]}`. Pattern: `client/src/pages/LoginPage.tsx`.
+- `Button` is base-ui (no `asChild`/Slot) — to render a link as a button, apply `buttonVariants({...})` to a `<Link>` (see `TicketDetailPage.tsx`).
+- Theme (light/dark CSS vars + Chrome autofill override) lives in `client/src/index.css`. Font: Geist Variable via `@fontsource-variable/geist`.
+- Add components with `cd client && bunx shadcn@latest add <name>`; names differ from classic shadcn (e.g. `form` → `field`) — check with `bunx shadcn@latest search @shadcn --query <term>`.
 
 ## Data fetching (client)
 
-Client-side API calls use **axios** for the HTTP request and **TanStack Query** (`@tanstack/react-query`) for fetching state — prefer these over raw `fetch`/`useEffect` for new code.
+Use **axios** + **TanStack Query** (`@tanstack/react-query`) for new code, not raw `fetch`/`useEffect`.
 
-- The `QueryClient` and `QueryClientProvider` are set up at the app root in `client/src/main.tsx` (wrapping `<App />`), so `useQuery`/`useMutation` work anywhere in the tree.
-- Fetch data with `useQuery({ queryKey, queryFn })`, where `queryFn` uses axios (e.g. `axios.get<T>('/api/...')` and returns `res.data`). Drive rendering off `isPending` / `isError` / `data`, not manual `useState`. See `client/src/pages/UsersPage.tsx` for the pattern.
-- Call the API with same-origin relative paths (`/api/...`) so the Vite proxy handles it — see Commands above. Axios rejects on non-2xx by default, so no manual `res.ok` check is needed.
-- Install client deps from **inside `client/`** (`cd client && bun add <pkg>`); the root `bun add --filter client <pkg>` currently fails with a Bun `DependencyLoop` error in this workspace.
+- `QueryClient`/`QueryClientProvider` are set at the app root (`client/src/main.tsx`).
+- Fetch with `useQuery({ queryKey, queryFn })` where `queryFn` uses `axios.get<T>('/api/...')` returning `res.data`; render off `isPending`/`isError`/`data`. Patterns: `UsersPage.tsx`, `TicketsPage.tsx` (server-side sort/filter/pagination + `keepPreviousData`), `TicketDetailPage.tsx`.
+- Same-origin relative paths (`/api/...`) so the Vite proxy handles it. Axios rejects on non-2xx, so no `res.ok` check. Read server errors via `getServerErrorMessage(error, fallback)` (`client/src/lib/http.ts`).
+- Install client deps from **inside `client/`** (`cd client && bun add <pkg>`); root `bun add --filter client` fails with a Bun `DependencyLoop` here.
 
 ## Database
 
-Prisma 7 + PostgreSQL, scoped entirely to `server/`:
+Prisma 7 + PostgreSQL, scoped to `server/`:
 
-- `server/prisma/schema.prisma` — datasource + generator, plus the `User`/`Session`/`Account`/`Verification` models required by Better Auth (see Authentication below). The ticket/email domain model itself is still Phase 2 in `implementation-plan.md` and doesn't exist yet.
-- `server/prisma.config.ts` — Prisma CLI config (schema/migrations paths, reads `DATABASE_URL` from `server/.env` via `dotenv/config`). Prisma 7 moved the datasource `url` out of `schema.prisma` and into this file — that's intentional, not a missing config.
-- `server/src/lib/prisma.ts` — shared `PrismaClient` singleton. Prisma 7 requires an explicit driver adapter (no bundled query engine), so this uses `@prisma/adapter-pg` (`pg` + `@prisma/adapter-pg` packages).
-- Generated client output: `server/src/generated/prisma` (gitignored, kept under `src/` so it satisfies `tsconfig.json`'s `rootDir`). Run `bun x prisma generate` from `server/` after changing the schema.
-- Migrations: `bun x prisma migrate dev --name <name>` from `server/`.
-- `server/.env` holds `DATABASE_URL` (gitignored, not committed) — point it at a local Postgres database.
-- `/api/health` runs `SELECT 1` through Prisma, so it doubles as a DB connectivity check.
+- `server/prisma/schema.prisma` — datasource + generator; the Better Auth models (`User`/`Session`/`Account`/`Verification`) and the ticket domain (`Ticket`/`TicketMessage`, see Tickets). All `@@map`-ed to lowercase table names.
+- `server/prisma.config.ts` — Prisma CLI config; reads `DATABASE_URL` from `server/.env` via `dotenv/config`. Prisma 7 keeps the datasource `url` here, not in `schema.prisma` (intentional).
+- `server/src/lib/prisma.ts` — shared `PrismaClient` singleton using the `@prisma/adapter-pg` driver adapter (Prisma 7 has no bundled query engine).
+- Generated client: `server/src/generated/prisma` (gitignored, under `src/` to satisfy `rootDir`). After a schema change: `bun x prisma generate`; migrate with `bun x prisma migrate dev --name <name>` (both from `server/`).
+- `server/.env` holds `DATABASE_URL` (gitignored). `/api/health` runs `SELECT 1` through Prisma — doubles as a DB connectivity check.
 
 ## Authentication
 
-Better Auth, email/password only, with self-serve sign-up disabled — users are created either by the seed script or by an admin through `POST /api/users` (there is no public sign-up).
+Better Auth, email/password only, self-serve sign-up disabled — users come from the seed script or an admin via `POST /api/users` (no public sign-up).
 
-- `server/src/lib/auth.ts` — shared `betterAuth()` instance. `emailAndPassword: { enabled: true, disableSignUp: true }`. `trustedOrigins` defaults to `http://localhost:5173` via `CLIENT_ORIGIN` env var (not currently set in `server/.env`, so it's running on the default). Adds a required `role` field (`admin` | `agent`) to the user via `user.additionalFields`, with `input: false` — it can't be set through any auth API call, only written directly via Prisma (e.g. the seed script). The column is a Prisma `Role` enum (`admin` | `agent`) in `schema.prisma`.
-- `server/src/lib/authorize.ts` — Express middleware for **server-side** authorization: `requireRole(...roles)` re-derives the session from the request cookies via `auth.api.getSession` (never trusts a client-supplied role), returns `401` if unauthenticated / `403` if the role doesn't match, and attaches the session to `req.session` (typed via a `declare global` augmentation of `Express.Request`). `requireAuth` is `requireRole()` with no roles (any authenticated user).
-- `server/src/index.ts` — mounts the auth handler at `app.all("/api/auth/*splat", toNodeHandler(auth))`. The `*splat` named wildcard is Express 5 / path-to-regexp v8 syntax (a bare `*` is no longer a valid route pattern). This must be registered **before** `express.json()`, since Better Auth parses its own request body; adding `express.json()` earlier would break auth requests. The user-domain endpoints — `GET`/`POST /api/users` and `PATCH`/`DELETE /api/users/:id`, all `requireRole(ROLE.admin)` — live in their own Express `Router` at `server/src/routes/users.ts`, mounted via `app.use("/api/users", usersRouter)`. `DELETE` is a **soft delete**: it sets a `deletedAt` timestamp on the `User` and revokes that user's sessions rather than removing the row, refuses to delete `admin` users (`403`), and `GET` filters soft-deleted users out (`where: { deletedAt: null }`).
-- Data model: `User`, `Session`, `Account`, `Verification` in `server/prisma/schema.prisma`, matching Better Auth's expected shape and `@@map`-ed to lowercase table names. `Account` holds the hashed password for the `credential` provider (`providerId: "credential"`).
-- `server/prisma/seed.ts` (run with `bun run seed` from `server/`) seeds users directly through Prisma via a `seedUser({ name, email, password, role })` helper — hashes the password with `hashPassword` from `better-auth/crypto` and creates matching `User` + `Account` (`providerId: "credential"`) rows, no-op if the email already exists. Always seeds an admin from `ADMIN_EMAIL`/`ADMIN_PASSWORD` (required); **also** seeds an agent when `AGENT_EMAIL`/`AGENT_PASSWORD` are set (optional).
-- Required `server/.env` vars for auth: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`; optional `AGENT_EMAIL`/`AGENT_PASSWORD` to also seed an agent (all gitignored, not committed).
-- `client/src/lib/auth-client.ts` — `createAuthClient()` from `better-auth/react` with no `baseURL`, so it relies on same-origin requests through the Vite `/api` proxy (see Commands above). Uses the `inferAdditionalFields<typeof auth>()` plugin so `session.user.role` is typed. Exports `useSession`, `signIn`, `signOut`. The role constants (`ROLE`, `ROLES`, `Role`) live in the `core` package (see Shared code above), not here — import them from `"core"`.
-- `client/src/App.tsx` — client-side routing with `react-router` (`BrowserRouter`/`Routes`/`Route`). A `ProtectedRoute` component redirects to `/login` when unauthenticated and to `/` when an optional `role` prop doesn't match `session.user.role`; routes are `/` (`HomePage`), `/login`, and `/users` (`UsersPage`, admin-only), with `*` → `/`. This is client-side guarding only (no route-loader protection) — the API is separately enforced by `requireRole` (above). `client/src/components/NavBar.tsx` reads `session.user.name`, calls `signOut()`, and shows a Users link only when `session.user.role === ROLE.admin`.
-- `@better-auth/cli` (server devDependency) was used to scaffold the Better Auth Prisma schema/migrations initially; you generally won't need to run it again unless adding new Better Auth plugins that require schema changes.
+- `server/src/lib/auth.ts` — `betterAuth()` instance, `emailAndPassword: { enabled: true, disableSignUp: true }`. `trustedOrigins` defaults to `http://localhost:5173` via `CLIENT_ORIGIN`. Adds a required `role` field (`admin`|`agent`) via `user.additionalFields` with `input: false` (settable only via Prisma, e.g. the seed).
+- `server/src/lib/authorize.ts` — server-side authz middleware: `requireRole(...roles)` re-derives the session from cookies via `auth.api.getSession` (never trusts a client role), `401` unauthenticated / `403` wrong role, attaches `req.session`. `requireAuth` = `requireRole()` (any authenticated user).
+- `server/src/index.ts` — mounts auth at `app.all("/api/auth/*splat", toNodeHandler(auth))` **before** `express.json()` (Better Auth parses its own body). `*splat` is Express 5 / path-to-regexp v8 wildcard syntax. Domain routers: `usersRouter` (`/api/users`), `inboundEmailRouter` (`/api/inbound-email`), `ticketsRouter` (`/api/tickets`).
+- User endpoints (`server/src/routes/users.ts`, all `requireRole(ROLE.admin)`): `GET`/`POST /api/users`, `PATCH`/`DELETE /api/users/:id`. `DELETE` is a **soft delete** (sets `deletedAt`, revokes sessions, refuses `admin` with `403`); `GET` filters `deletedAt: null`.
+- Data model: `User`/`Session`/`Account`/`Verification` match Better Auth's shape; `Account` holds the hashed password for the `credential` provider.
+- `server/prisma/seed.ts` (`bun run seed` from `server/`) — seeds via a `seedUser({ name, email, password, role })` helper (hashes with `hashPassword` from `better-auth/crypto`, creates a `User` + `credential` `Account`, no-op if the email exists). Always seeds an admin from `ADMIN_EMAIL`/`ADMIN_PASSWORD`; also an agent when `AGENT_EMAIL`/`AGENT_PASSWORD` are set.
+- Required `server/.env`: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`; optional `AGENT_EMAIL`/`AGENT_PASSWORD`, `CLIENT_ORIGIN`, `INBOUND_EMAIL_SECRET` (all gitignored).
+- `client/src/lib/auth-client.ts` — `createAuthClient()` (no `baseURL`, same-origin via proxy), `inferAdditionalFields<typeof auth>()` so `session.user.role` is typed. Exports `useSession`, `signIn`, `signOut`. Role constants come from `"core"`, not here.
+- `client/src/App.tsx` — `react-router` (`BrowserRouter`). `ProtectedRoute` redirects to `/login` when unauthenticated and to `/` when an optional `role` prop mismatches. Routes: `/` (`HomePage`), `/login`, `/tickets` (`TicketsPage`), `/tickets/:id` (`TicketDetailPage`), `/users` (`UsersPage`, admin-only), `*` → `/`. Client-side guarding only; the API is separately enforced by `requireRole`. `NavBar` shows Tickets (all authed) and Users (admin only), reads `session.user.name`, calls `signOut()`.
 
-## Email ingestion
+## Tickets
 
-The inbound support-email path (Phase 5 in `implementation-plan.md`, which also pulled in the Phase 2 ticket model). Currently backend-only — there is no ticket UI yet.
+The ticket domain — inbound-email ingestion (Phase 5) plus the agent-facing UI (Phase 4).
 
-- Data model: `Ticket` (`subject`, `requesterEmail`, `status`/`category` enums, timestamps) and `TicketMessage` (`type`, `fromEmail`, `body`, `messageId`, `inReplyTo`) in `server/prisma/schema.prisma`, `@@map`-ed to `ticket`/`ticket_message`. `TicketMessage.messageId` is a nullable **`@unique`** column — it stores the email `Message-ID` and powers both dedupe and threading. The status/category/message-type enums mirror `core/src/ticket.ts` (`TICKET_STATUS`/`TICKET_CATEGORY`/`TICKET_MESSAGE_TYPE`, same `X`/`XS`/`Type` triple pattern as roles) — import those from `"core"` rather than hardcoding strings or the Prisma-generated enums. New tickets default to `status: open`, `category: general` (AI classification will set category in Phase 6); only `TICKET_MESSAGE_TYPE.inbound` messages are produced today.
-- `POST /api/inbound-email` (`server/src/routes/inbound-email.ts`) — the webhook that turns an email into a ticket. It takes a **provider-agnostic JSON body** validated by `inboundEmailSchema` in `core` (`{ from, subject, text, messageId?, inReplyTo?, references? }`); a real SendGrid/Mailgun adapter can be layered on later. Behavior: **dedupe** by `messageId` (provider retries return the existing ticket, `200 { deduped: true }`); **thread-match** `inReplyTo`/`references` against existing `TicketMessage.messageId` and append to that ticket (reopening it to `open` if it was resolved/closed), else create a new ticket (`201 { created: true }`). The handler is wrapped in try/catch → `500 { error }` with a `console.error`.
-- Auth: the webhook is **public** (a mail provider carries no Better Auth session cookie), so it uses `verifyWebhookSecret` (`server/src/lib/webhookAuth.ts`) instead of `requireRole` — a constant-time compare of the `X-Webhook-Secret` header against the `INBOUND_EMAIL_SECRET` env var (`401` on mismatch/missing). Add `INBOUND_EMAIL_SECRET` to `server/.env` (and `.env.test`); it's in `.env.test.example`.
-- `GET /api/tickets` (`server/src/routes/tickets.ts`, `requireAuth`) — lists tickets (summary fields + message `_count`) ordered by `updatedAt` desc, for any authenticated agent/admin.
+**Data model** (`server/prisma/schema.prisma`): `Ticket` (`subject`, `requesterEmail`, `status`/`category` enums, optional `assignee` → `User` via `assigneeId` with `onDelete: SetNull`, timestamps, `messages`) and `TicketMessage` (`type`, `fromEmail`, `body`, `messageId`, `inReplyTo`). `TicketMessage.messageId` is a nullable `@unique` column storing the email `Message-ID` (powers dedupe + threading). The status/category/message-type Prisma enums mirror `core/src/ticket.ts` — import those constants, don't hardcode. New tickets default to `status: open`, `category: general`; only `TICKET_MESSAGE_TYPE.inbound` messages are produced today.
+
+**Endpoints** (`server/src/routes/tickets.ts`, `requireAuth`):
+- `GET /api/tickets` — paginated list (summary fields + message `_count`). Query params validated by `ticketListQuerySchema`: `sort`/`order` (server-side ordering; `messages` sorts on the relation `_count`), optional `status`/`category`/`q` filters (`q` matches subject OR requester email, case-insensitive, AND-ed), `page`/`pageSize`. Responds `{ tickets, total, page, pageSize }`.
+- `GET /api/tickets/:id` — one ticket with its full message thread (oldest-first) and `assignee` (`{ id, name, email }` or `null`); `404 { error }` if unknown.
+
+**Inbound webhook** — `POST /api/inbound-email` (`server/src/routes/inbound-email.ts`): provider-agnostic JSON validated by `inboundEmailSchema` (`{ from, subject, text, messageId?, inReplyTo?, references? }`). **Deduped** by `messageId` (retries → `200 { deduped: true }`); **thread-matched** on `inReplyTo`/`references` against `TicketMessage.messageId` (append + reopen if resolved/closed), else create (`201 { created: true }`). Public (mail providers carry no session cookie) — guarded by `verifyWebhookSecret` (`server/src/lib/webhookAuth.ts`), a constant-time compare of the `X-Webhook-Secret` header vs `INBOUND_EMAIL_SECRET` (`401` on mismatch). try/catch → `500 { error }`.
+
+**Client UI**:
+- `client/src/pages/TicketsPage.tsx` — list built on TanStack Table: server-side sort via column headers, status/category `FilterSelect`s, debounced search, and pagination. Each subject links to its detail page.
+- `client/src/pages/TicketDetailPage.tsx` — a plain header block (subject, status/category badges, Requester / Assigned To / Opened) distinct from the message thread rendered below as `Card`s.
+- `client/src/lib/ticketMeta.ts` — shared label + Badge-variant maps for status/category/message-type (the single-source-of-truth reference pattern). `client/src/lib/format.ts` — `formatDate` / `formatDateTime` (shared `Intl` instances).
 
 ## Validation (server)
 
-Request-body validation on the server uses **Zod** (`zod`, v4, a `server` dependency) — validate untrusted input with a schema, not hand-rolled `typeof`/regex checks.
+Server request-body validation uses **Zod** (v4, a `server` dependency) — validate untrusted input with a schema, not hand-rolled checks. Reference: `POST /api/users`.
 
-- Define a schema with `z.object({...})` and validate via `schema.safeParse(req.body)`. On failure, return `400` with the first issue's message: `res.status(400).json({ error: parsed.error.issues[0].message })`, then use the typed `parsed.data`. See `POST /api/users` in `server/src/routes/users.ts` for the reference pattern; its `createUserSchema` lives in the `core` package (shared with the client — see Shared code above), which is where a schema belongs whenever the client validates the same shape.
-- The `{ error: "<message>" }` single-string shape is the contract the client relies on — the client reads it via `getServerErrorMessage(error, fallback)` in `client/src/lib/http.ts` (which pulls `error.response?.data?.error`) — keep it; don't return Zod's raw `flatten()`/`issues` array.
-- Use Zod 4 APIs: top-level string formats like `z.email(msg)` (not the deprecated `z.string().email()`), and `.trim()` before format checks (e.g. `z.string().trim().pipe(z.email(msg))`) to match how fields were trimmed previously. Pass a custom message to each validator so the response stays user-friendly; non-string/missing fields fall back to Zod's default `"Invalid input: ..."` message.
+- Validate via the `parseBody(schema, source, res)` helper (`server/src/lib/validate.ts`): on failure it sends `400 { error: <first issue message> }` and returns `null` (caller `return`s early); on success returns typed data. `ticketsRouter` uses the same helper for `req.query`.
+- The `{ error: "<message>" }` single-string shape is the client contract (read via `getServerErrorMessage`) — keep it; don't return Zod's raw `flatten()`/`issues`.
+- Zod 4 APIs: top-level formats like `z.email(msg)` (not `z.string().email()`), `.trim()` before format checks (`z.string().trim().pipe(z.email(msg))`), a custom message per validator. Schemas shared with the client live in `core` (see Shared code).
 
 ## Testing (component)
 
-Client component/unit tests use **Vitest + React Testing Library**, scoped to the `client` workspace. Specs are colocated next to the code as `client/src/**/*.test.tsx`. See `client/src/pages/UsersPage.test.tsx` for query/loading/error/empty states, and the dialog specs (`CreateUserDialog.test.tsx`, `EditUserDialog.test.tsx`, `DeleteUserDialog.test.tsx`) for dialog + form/mutation flows. For test-quality principles (maintainable/robust/trustworthy), use the `writing-good-tests` skill; this section covers the repo-specific mechanics only.
+Client component/unit tests: **Vitest + React Testing Library**, colocated as `client/src/**/*.test.tsx`. References: `UsersPage.test.tsx` (query states), the dialog specs (form/mutation flows), `TicketsPage.test.tsx` / `TicketDetailPage.test.tsx`. For test-quality principles use the `writing-good-tests` skill; this covers repo mechanics only.
 
-- **Run tests with `bun run test`, never bare `bun test`.** `bun test` invokes Bun's own test runner, which picks up the `*.test.tsx` files but provides only a partial `vi` shim (e.g. no `vi.mocked`) and fails. Commands: `bun --filter client test` / `bun --filter client test:watch` from the root, or `bun run test` / `bun run test:watch` from `client/`.
-- Config lives in the `test` block of `client/vite.config.ts` (which imports `defineConfig` from `vitest/config`, a superset of Vite's): `environment: 'happy-dom'`, `globals: true`, `setupFiles: './src/test/setup.ts'`.
-- **Environment is `happy-dom`, not `jsdom`** — jsdom pulls in `undici`, whose `CacheStorage` throws `webidl.util.markAsUncloneable is not a function` under Bun's runtime. Don't switch back to jsdom.
-- `client/src/test/setup.ts` loads `@testing-library/jest-dom/vitest` matchers and runs RTL `cleanup()` after each test. `vitest/globals` is in `tsconfig.app.json`'s `types` so the globals (`describe`/`it`/`expect`/`vi`) typecheck.
-- For components that use TanStack Query, render them via `renderWithQueryClient(ui)` from `client/src/test/render.tsx` — it wraps the tree in a fresh `QueryClientProvider` with `retryDelay: 0` so a component's own `retry` count reaches the error state without real backoff (which would blow the test timeout). Mock network calls by mocking axios with `vi.mock('axios', () => ({ default: { get: vi.fn() } }))`; components that mutate also stub the verb they call plus `isAxiosError` (e.g. `{ default: { delete: vi.fn(), isAxiosError: vi.fn() } }`) so the server-error branch (via `getServerErrorMessage`) can be exercised.
+- Run with `bun --filter client test` (or `bun run test` from `client/`); **never bare `bun test`** (see Commands).
+- Config: the `test` block in `client/vite.config.ts` — `environment: 'happy-dom'` (**not jsdom** — jsdom's `undici` throws `markAsUncloneable is not a function` under Bun), `globals: true`, `setupFiles: './src/test/setup.ts'` (loads jest-dom matchers, RTL `cleanup()` after each test).
+- Render helpers (`client/src/test/render.tsx`): `renderWithQueryClient(ui)` wraps a fresh `QueryClientProvider` (`retryDelay: 0` so a component's `retry` reaches the error state fast); `renderWithProviders(ui, { initialEntries })` also wraps `MemoryRouter` for components using `<Link>`/router hooks (`useParams`, etc.).
+- Mock network via `vi.mock('axios', () => ({ default: { get: vi.fn() } }))`; add the verb you call plus `isAxiosError` (e.g. `{ default: { get: vi.fn(), isAxiosError: vi.fn() } }`) to exercise the server-error / 404 branches.
 
 ## Testing (E2E)
 
-Playwright is configured at the repo root, running against a **separate test database** so runs never touch dev data.
+Playwright at the repo root, against a **separate test database** so runs never touch dev data.
 
-**Reach for E2E only when a behavior genuinely needs the real client + server + database together** — a full auth/session round-trip, server-enforced authorization/redirects, data that must actually persist across a reload. E2E is the slowest, most expensive layer (it boots both servers and a browser against the test DB), so keep it thin and reserve it for integration seams. **Push everything that can be verified client-side down into a component test** (`*.test.tsx`): form/Zod validation, role-based conditional rendering, query loading/empty/error states, and anything drivable with a mocked boundary (`vi.mock` of axios or `@/lib/auth-client`). The rule of thumb: if a mocked network/auth boundary can prove the behavior, it's a component test; if the assertion is really "the live server did X", it's E2E. Reference split: pure-client login-form validation and NavBar role gating live in `client/src/pages/LoginPage.test.tsx` / `client/src/components/NavBar.test.tsx`, while the real sign-in/session/redirect flows stay in `e2e/auth.spec.ts`. Don't cover the same behavior at both layers — move it down, don't duplicate.
+**Reach for E2E only when a behavior needs the real client + server + DB together** — auth/session round-trips, server-enforced authz/redirects, real persistence across a reload. It's the slowest layer; keep it thin. **Push everything provable client-side down into a component test** (form/Zod validation, role-based rendering, query loading/empty/error, anything drivable with a mocked axios / `auth-client` boundary). Rule of thumb: mocked boundary → component test; "the live server did X" → E2E. Reference split: `LoginPage.test.tsx` / `NavBar.test.tsx` (client) vs `e2e/auth.spec.ts` (real sign-in/redirect). Don't cover the same behavior at both layers.
 
-**Always write or update E2E specs through the `e2e-test-writer` subagent** (`.claude/agents/e2e-test-writer.md`) — launch it via the Agent tool (`subagent_type: "e2e-test-writer"`) whenever the task involves adding, changing, or debugging tests in `e2e/`. It owns the detailed conventions (locator strategy, seeded users, parallel-safe specs) and the harness wiring, so don't hand-write specs in the main thread or duplicate those details here. Key facts to know without opening it:
-
-- Config is `playwright.config.ts` (root); specs go in `e2e/`; `baseURL` is `http://localhost:5173`.
-- Runs boot the real client + server against the test DB; `reuseExistingServer` is `false`, so **stop `bun dev` before running E2E** or the ports collide.
-- `server/.env.test` (gitignored; template `server/.env.test.example`) holds the test `DATABASE_URL` + seed credentials; `e2e/global-setup.ts` migrates and seeds that DB once before tests.
-- Commands (from root): `bun test:e2e`, `bun test:e2e:ui`, `bun test:e2e:report`. First-time setup: `bunx playwright install chromium`.
+**Always write/update E2E specs through the `e2e-test-writer` subagent** (Agent tool, `subagent_type: "e2e-test-writer"`) — it owns the locator/seed/parallel-safe conventions and harness wiring. Key facts:
+- Config `playwright.config.ts` (root); specs in `e2e/`; `baseURL` `http://localhost:5173`.
+- Boots the real client + server against the test DB; `reuseExistingServer: false`, so **stop `bun dev` before running E2E** or ports collide.
+- `server/.env.test` (gitignored; template `server/.env.test.example`) holds the test `DATABASE_URL` + seed credentials; `e2e/global-setup.ts` migrates/seeds it once.
+- Commands (root): `bun test:e2e`, `bun test:e2e:ui`, `bun test:e2e:report`. First time: `bunx playwright install chromium`.
 
 ## Fetching library documentation (Context7 MCP)
 
-Use the Context7 MCP tools to pull current docs whenever working with a library/framework in this repo (React, Express, Vite, Tailwind, Bun, Better Auth, Prisma, or anything added later) instead of relying on training data. This matters here because the stack pins specific majors (e.g. **Express 5**, **Prisma 7**, **Tailwind v4**, **React 19**) whose APIs differ from older training-data assumptions.
+Use Context7 MCP to pull current docs for any library here (React 19, Express 5, Vite, Tailwind v4, Bun, Better Auth, Prisma 7…) rather than training data — the stack pins majors whose APIs differ from older assumptions.
 
-**Workflow — always two steps, in order:**
-1. `mcp__context7__resolve-library-id` — pass the library name (e.g. `Express`) to get its Context7 ID (e.g. `/expressjs/express`). Skip this only if the user gives an ID in `/org/project` form directly.
-2. `mcp__context7__query-docs` — pass that `libraryId` plus a specific, single-concept `query` (e.g. "Express 5 wildcard route syntax with path-to-regexp v8"), not a vague term. One call per distinct concept.
+**Workflow (two steps):** (1) `mcp__context7__resolve-library-id` — library name → Context7 ID (skip only if given an ID in `/org/project` form); (2) `mcp__context7__query-docs` — that `libraryId` + a specific, single-concept `query`, one call per concept.
 
-**Setup / configuration:** Context7 is registered as an MCP server for Claude Code (not an app dependency — it's not in any `package.json`). Manage it with the CLI, not by hand-editing configs:
-- `claude mcp list` — see configured servers and their connection status.
-- `claude mcp get context7` — inspect this server's transport/URL.
-- Add (project scope, shared via a checked-in `.mcp.json`): `claude mcp add --transport http context7 https://mcp.context7.com/mcp --scope project --header "CONTEXT7_API_KEY: <key>"`, or the local stdio form `claude mcp add context7 --scope project -- npx -y @upstash/context7-mcp`. Use `--scope user` for all-projects, or omit `--scope` for local-only.
-- In-session, `/mcp` shows connection state and handles re-auth.
+**Setup:** registered as an MCP server (not a package dep). Manage via CLI: `claude mcp list` / `claude mcp get context7`; add with `claude mcp add --transport http context7 https://mcp.context7.com/mcp --scope project --header "CONTEXT7_API_KEY: <key>"` (or stdio `claude mcp add context7 --scope project -- npx -y @upstash/context7-mcp`). `/mcp` shows connection state / re-auth in-session.
 
-**If a call fails:** the tools may load but calls can fail at runtime with `TypeError: fetch failed` when the environment can't reach `mcp.context7.com` (blocked outbound HTTPS) or the `CONTEXT7_API_KEY` is missing/expired. When that happens, say so explicitly rather than silently falling back — then proceed using best knowledge and lean harder on empirical verification (typecheck, a real runtime/`curl` check) to confirm library behavior. Don't present unavailable docs as if they were consulted.
+**If a call fails** (`TypeError: fetch failed` — blocked outbound HTTPS, or a missing/expired `CONTEXT7_API_KEY`): say so explicitly, then proceed on best knowledge and lean on empirical verification (typecheck, a real runtime/`curl` check). Don't present unavailable docs as if consulted.
