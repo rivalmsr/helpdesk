@@ -1,4 +1,5 @@
 import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import axios from 'axios'
 import { renderWithQueryClient } from '@/test/render'
 import { formatDate } from '@/lib/format'
@@ -50,10 +51,14 @@ beforeEach(() => {
 })
 
 describe('TicketsPage', () => {
-  it('requests the tickets endpoint', async () => {
+  it('requests the tickets endpoint sorted newest-first by default', async () => {
     renderWithTickets()
 
-    await waitFor(() => expect(mockedGet).toHaveBeenCalledWith('/api/tickets'))
+    await waitFor(() =>
+      expect(mockedGet).toHaveBeenCalledWith('/api/tickets', {
+        params: { sort: 'createdAt', order: 'desc' },
+      }),
+    )
   })
 
   it('shows skeleton placeholders while loading', () => {
@@ -139,5 +144,52 @@ describe('TicketsPage', () => {
 
     expect(await screen.findByText('Failed to load tickets')).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  })
+
+  it('re-requests sorted ascending, then descending, when a column header is clicked', async () => {
+    const user = userEvent.setup()
+    renderWithTickets()
+    await findRow(/Cannot access dashboard/)
+
+    // First click on an unsorted column sorts it ascending...
+    await user.click(screen.getByRole('button', { name: /subject/i }))
+    await waitFor(() =>
+      expect(mockedGet).toHaveBeenLastCalledWith('/api/tickets', {
+        params: { sort: 'subject', order: 'asc' },
+      }),
+    )
+
+    // ...and clicking again flips to descending.
+    await user.click(screen.getByRole('button', { name: /subject/i }))
+    await waitFor(() =>
+      expect(mockedGet).toHaveBeenLastCalledWith('/api/tickets', {
+        params: { sort: 'subject', order: 'desc' },
+      }),
+    )
+  })
+
+  it('exposes the active sort direction via aria-sort on the header', async () => {
+    const user = userEvent.setup()
+    renderWithTickets()
+    await findRow(/Cannot access dashboard/)
+
+    // Created is the default sort (newest-first → descending).
+    expect(screen.getByRole('columnheader', { name: /created/i })).toHaveAttribute(
+      'aria-sort',
+      'descending',
+    )
+
+    await user.click(screen.getByRole('button', { name: /subject/i }))
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('columnheader', { name: /subject/i }),
+      ).toHaveAttribute('aria-sort', 'ascending'),
+    )
+    // The previous sort column is no longer marked.
+    expect(screen.getByRole('columnheader', { name: /created/i })).toHaveAttribute(
+      'aria-sort',
+      'none',
+    )
   })
 })

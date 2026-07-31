@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TICKET_SORT_FIELDS, TICKET_SORT_FIELD } from "./ticket";
 
 /**
  * Shared validation schema for the inbound-email webhook (`POST /api/inbound-email`).
@@ -20,3 +21,15 @@ export const inboundEmailSchema = z.object({
 });
 
 export type InboundEmailInput = z.infer<typeof inboundEmailSchema>;
+
+/**
+ * Query-param validation for the ticket list (`GET /api/tickets`). `sort`/`order`
+ * drive the server-side Prisma `orderBy`; both `.default(...)` so a bare request
+ * (no params) still resolves to the newest-first default the page has always used.
+ */
+export const ticketListQuerySchema = z.object({
+  sort: z.enum(TICKET_SORT_FIELDS).default(TICKET_SORT_FIELD.createdAt),
+  order: z.enum(["asc", "desc"]).default("desc"),
+});
+
+export type TicketListQuery = z.infer<typeof ticketListQuerySchema>;

@@ -34,6 +34,32 @@ export const TICKET_CATEGORIES = [
 export type TicketCategory = (typeof TICKET_CATEGORIES)[number];
 
 /**
+ * The columns the ticket list (`GET /api/tickets`) can be sorted by. Shared so
+ * the client's TanStack Table column ids and the server's Prisma `orderBy` stay
+ * in lockstep — `messages` sorts on the related message `_count`, the rest are
+ * direct `Ticket` columns. Same `X`/`XS`/`Type` triple pattern as above.
+ */
+export const TICKET_SORT_FIELD = {
+  subject: "subject",
+  requesterEmail: "requesterEmail",
+  status: "status",
+  category: "category",
+  messages: "messages",
+  createdAt: "createdAt",
+} as const;
+
+export const TICKET_SORT_FIELDS = [
+  TICKET_SORT_FIELD.subject,
+  TICKET_SORT_FIELD.requesterEmail,
+  TICKET_SORT_FIELD.status,
+  TICKET_SORT_FIELD.category,
+  TICKET_SORT_FIELD.messages,
+  TICKET_SORT_FIELD.createdAt,
+] as const;
+
+export type TicketSortField = (typeof TICKET_SORT_FIELDS)[number];
+
+/**
  * The kind of thread entry a `TicketMessage` represents. Only `inbound` is
  * produced today (by email ingestion); `agent_reply` and `ai_draft` are
  * reserved for later phases (manual replies, AI-suggested drafts).
