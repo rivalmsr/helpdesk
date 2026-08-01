@@ -1,18 +1,44 @@
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router'
 import axios from 'axios'
 import { renderWithProviders } from '@/test/render'
+import { useSession } from '@/lib/auth-client'
 import { formatDateTime } from '@/lib/format'
 import TicketDetailPage from './TicketDetailPage'
 
 // TicketDetailPage fetches through axios; mock the module so no real request is
 // made. `isAxiosError` is stubbed so the 404 / error branches can be exercised.
 vi.mock('axios', () => ({
-  default: { get: vi.fn(), isAxiosError: vi.fn() },
+  default: { get: vi.fn(), patch: vi.fn(), isAxiosError: vi.fn() },
 }))
 
+// The page reads the session role to decide whether the assignee is editable.
+vi.mock('@/lib/auth-client', () => ({ useSession: vi.fn() }))
+
 const mockedGet = vi.mocked(axios.get)
+const mockedPatch = vi.mocked(axios.patch)
 const mockedIsAxiosError = vi.mocked(axios.isAxiosError)
+const mockedUseSession = vi.mocked(useSession)
+
+// Sets the signed-in user's role (admin sees the assignee select; agent sees it
+// read-only). Cast because the test only needs `user.role`, not the full shape.
+const setRole = (role: 'admin' | 'agent') =>
+  mockedUseSession.mockReturnValue({ data: { user: { role } } } as never)
+
+const agents = [
+  { id: 'u1', name: 'Alex Agent', email: 'alex@acme.com' },
+  { id: 'u2', name: 'Sam Support', email: 'sam@acme.com' },
+]
+
+// Serves the ticket for `/api/tickets/:id` and the agent list for `/api/agents`
+// (the admin-only picker fetches the latter).
+const mockGet = (data = ticket) =>
+  mockedGet.mockImplementation((url: string) =>
+    url === '/api/agents'
+      ? Promise.resolve({ data: agents })
+      : Promise.resolve({ data }),
+  )
 
 const ticket = {
   id: '1',
@@ -60,7 +86,11 @@ const reject404 = () => {
 
 beforeEach(() => {
   mockedGet.mockReset()
+  mockedPatch.mockReset()
   mockedIsAxiosError.mockReset()
+  mockedUseSession.mockReset()
+  // Default to an agent (read-only assignee); admin tests opt in via setRole.
+  setRole('agent')
 })
 
 describe('TicketDetailPage', () => {
@@ -99,6 +129,81 @@ describe('TicketDetailPage', () => {
     renderDetail()
 
     expect(await screen.findByText('Unassigned')).toBeInTheDocument()
+  })
+
+  it('shows the assignee read-only for an agent (no picker, no agents fetch)', async () => {
+    setRole('agent')
+    mockGet()
+    renderDetail()
+
+    expect(await screen.findByText('Alex Agent')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('combobox', { name: /assign to/i }),
+    ).not.toBeInTheDocument()
+    expect(mockedGet).not.toHaveBeenCalledWith('/api/agents')
+  })
+
+  it('lets an admin assign an agent and reflects it once saved', async () => {
+    const user = userEvent.setup()
+    setRole('admin')
+    mockGet()
+    mockedPatch.mockResolvedValue({ data: { ...ticket, assignee: agents[1] } })
+    renderDetail()
+
+    await screen.findByRole('heading', { level: 1 })
+    await user.click(screen.getByRole('combobox', { name: /assign to/i }))
+    await user.click(await screen.findByRole('option', { name: 'Sam Support' }))
+
+    await waitFor(() =>
+      expect(mockedPatch).toHaveBeenCalledWith('/api/tickets/1', {
+        assigneeId: 'u2',
+      }),
+    )
+    // The controlled value only updates after the server round-trip succeeds.
+    await waitFor(() =>
+      expect(
+        screen.getByRole('combobox', { name: /assign to/i }),
+      ).toHaveTextContent('Sam Support'),
+    )
+  })
+
+  it('lets an admin unassign, sending a null assignee', async () => {
+    const user = userEvent.setup()
+    setRole('admin')
+    mockGet()
+    mockedPatch.mockResolvedValue({ data: { ...ticket, assignee: null } })
+    renderDetail()
+
+    await screen.findByRole('heading', { level: 1 })
+    await user.click(screen.getByRole('combobox', { name: /assign to/i }))
+    await user.click(await screen.findByRole('option', { name: 'Unassigned' }))
+
+    await waitFor(() =>
+      expect(mockedPatch).toHaveBeenCalledWith('/api/tickets/1', {
+        assigneeId: null,
+      }),
+    )
+  })
+
+  it('surfaces an error when assigning fails', async () => {
+    const user = userEvent.setup()
+    setRole('admin')
+    mockGet()
+    // Realistic isAxiosError (true only for values with a `response`) so the
+    // detail query's null error doesn't trip the not-found path.
+    mockedIsAxiosError.mockImplementation((e) => Boolean(e && (e as any).response))
+    mockedPatch.mockRejectedValue({
+      response: { data: { error: 'Assignee must be an active agent' } },
+    })
+    renderDetail()
+
+    await screen.findByRole('heading', { level: 1 })
+    await user.click(screen.getByRole('combobox', { name: /assign to/i }))
+    await user.click(await screen.findByRole('option', { name: 'Sam Support' }))
+
+    expect(
+      await screen.findByText('Assignee must be an active agent'),
+    ).toBeInTheDocument()
   })
 
   it('renders each message in the thread with its timestamp', async () => {

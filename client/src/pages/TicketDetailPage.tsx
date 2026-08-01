@@ -14,6 +14,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { TicketAssignee } from '@/components/TicketAssignee'
 import { cn } from '@/lib/utils'
 import { formatDateTime } from '@/lib/format'
 import {
@@ -33,7 +34,7 @@ type TicketMessage = {
 
 // The single-ticket shape returned by `GET /api/tickets/:id` (with its thread).
 // `assignee` is null while the ticket is unassigned.
-type TicketDetail = {
+export type TicketDetail = {
   id: string
   subject: string
   requesterEmail: string
@@ -122,13 +123,10 @@ function TicketDetailPage() {
               <div>
                 <dt className="text-muted-foreground">Assigned To</dt>
                 <dd className="mt-0.5 font-medium">
-                  {ticket.assignee ? (
-                    ticket.assignee.name
-                  ) : (
-                    <span className="font-normal text-muted-foreground italic">
-                      Unassigned
-                    </span>
-                  )}
+                  <TicketAssignee
+                    ticketId={ticket.id}
+                    assignee={ticket.assignee}
+                  />
                 </dd>
               </div>
               <div>

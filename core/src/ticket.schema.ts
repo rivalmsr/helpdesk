@@ -50,3 +50,14 @@ export const ticketListQuerySchema = z.object({
 });
 
 export type TicketListQuery = z.infer<typeof ticketListQuerySchema>;
+
+/**
+ * Body validation for assigning a ticket (`PATCH /api/tickets/:id`). `assigneeId`
+ * is the id of the agent to assign, or `null` to unassign. The route further
+ * verifies the id belongs to an active agent before writing it.
+ */
+export const assignTicketSchema = z.object({
+  assigneeId: z.string().nullable(),
+});
+
+export type AssignTicketInput = z.infer<typeof assignTicketSchema>;

@@ -1,11 +1,40 @@
 import { Router } from "express";
-import { ticketListQuerySchema, TICKET_SORT_FIELD } from "core";
+import {
+  ticketListQuerySchema,
+  assignTicketSchema,
+  TICKET_SORT_FIELD,
+  ROLE,
+} from "core";
 import type { Prisma } from "../generated/prisma/client";
 import { prisma } from "../lib/prisma";
-import { requireAuth } from "../lib/authorize";
+import { requireAuth, requireRole } from "../lib/authorize";
 import { parseBody } from "../lib/validate";
 
 export const ticketsRouter = Router();
+
+// The single-ticket shape returned by both `GET /:id` and `PATCH /:id`: the
+// ticket, its assignee, and the full message thread (oldest-first). Kept as one
+// const so the two routes stay in sync.
+const ticketDetailSelect = {
+  id: true,
+  subject: true,
+  requesterEmail: true,
+  status: true,
+  category: true,
+  createdAt: true,
+  updatedAt: true,
+  assignee: { select: { id: true, name: true, email: true } },
+  messages: {
+    select: {
+      id: true,
+      type: true,
+      fromEmail: true,
+      body: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "asc" },
+  },
+} satisfies Prisma.TicketSelect;
 
 // Any authenticated agent or admin can view the ticket queue. `sort`/`order`
 // query params drive server-side ordering (defaults to newest-first);
@@ -68,32 +97,50 @@ ticketsRouter.get("/", requireAuth, async (req, res) => {
 ticketsRouter.get<{ id: string }>("/:id", requireAuth, async (req, res) => {
   const ticket = await prisma.ticket.findUnique({
     where: { id: req.params.id },
-    select: {
-      id: true,
-      subject: true,
-      requesterEmail: true,
-      status: true,
-      category: true,
-      createdAt: true,
-      updatedAt: true,
-      assignee: { select: { id: true, name: true, email: true } },
-      messages: {
-        select: {
-          id: true,
-          type: true,
-          fromEmail: true,
-          body: true,
-          createdAt: true,
-        },
-        orderBy: { createdAt: "asc" },
-      },
-    },
+    select: ticketDetailSelect,
   });
 
   if (!ticket) {
     res.status(404).json({ error: "Ticket not found" });
     return;
   }
+
+  res.json(ticket);
+});
+
+// Assign (or unassign) a ticket. Admin-only — assigning work is a management
+// action, mirroring the admin-gated user routes. `assigneeId: null` unassigns;
+// a non-null id must belong to an active agent. Responds with the updated ticket
+// in the same shape as `GET /:id`.
+ticketsRouter.patch<{ id: string }>("/:id", requireRole(ROLE.admin), async (req, res) => {
+  const data = parseBody(assignTicketSchema, req.body, res);
+  if (!data) return;
+
+  const existing = await prisma.ticket.findUnique({
+    where: { id: req.params.id },
+    select: { id: true },
+  });
+  if (!existing) {
+    res.status(404).json({ error: "Ticket not found" });
+    return;
+  }
+
+  if (data.assigneeId !== null) {
+    const agent = await prisma.user.findUnique({
+      where: { id: data.assigneeId },
+      select: { role: true, deletedAt: true },
+    });
+    if (!agent || agent.deletedAt || agent.role !== ROLE.agent) {
+      res.status(400).json({ error: "Assignee must be an active agent" });
+      return;
+    }
+  }
+
+  const ticket = await prisma.ticket.update({
+    where: { id: req.params.id },
+    data: { assigneeId: data.assigneeId },
+    select: ticketDetailSelect,
+  });
 
   res.json(ticket);
 });
