@@ -3,7 +3,6 @@ import { Link } from 'react-router'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import {
   createColumnHelper,
-  flexRender,
   getCoreRowModel,
   useReactTable,
   type ColumnDef,
@@ -12,26 +11,12 @@ import {
 } from '@tanstack/react-table'
 import axios from 'axios'
 import {
-  ArrowDown,
-  ArrowUp,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  ChevronsUpDown,
-  Search,
-  X,
-} from 'lucide-react'
-import {
-  TICKET_STATUSES,
-  TICKET_CATEGORIES,
   TICKET_SORT_FIELD,
   TICKET_PAGE_SIZE,
   type TicketStatus,
   type TicketCategory,
 } from 'core'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -39,25 +24,9 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { FilterSelect, type FilterOption } from '@/components/FilterSelect'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { Skeleton } from '@/components/ui/skeleton'
-import { cn } from '@/lib/utils'
+import { Pagination } from '@/components/Pagination'
+import { TicketsFilters } from '@/components/TicketsFilters'
+import { TicketsTable } from '@/components/TicketsTable'
 import { formatDate } from '@/lib/format'
 import { STATUS_LABEL, STATUS_VARIANT, CATEGORY_LABEL } from '@/lib/ticketMeta'
 import { useDebouncedValue } from '@/lib/useDebouncedValue'
@@ -69,7 +38,9 @@ declare module '@tanstack/react-table' {
   }
 }
 
-type Ticket = {
+// One row in the ticket list (`GET /api/tickets`). Exported for `TicketsTable`,
+// which renders the rows off the TanStack table instance.
+export type Ticket = {
   id: string
   subject: string
   requesterEmail: string
@@ -87,22 +58,6 @@ type TicketsResponse = {
   page: number
   pageSize: number
 }
-
-// Short labels for the filter options (the table badges use the fuller labels
-// above). Capitalizing the enum value keeps a single source of truth.
-const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
-
-// The `all` sentinel is a UI-only "no filter" value (not a domain enum member),
-// so its literal key is fine; the enum options reference the `core` constants.
-const STATUS_OPTIONS: FilterOption<TicketStatus>[] = [
-  { value: 'all', label: 'All statuses' },
-  ...TICKET_STATUSES.map((value) => ({ value, label: STATUS_LABEL[value] })),
-]
-
-const CATEGORY_OPTIONS: FilterOption<TicketCategory>[] = [
-  { value: 'all', label: 'All categories' },
-  ...TICKET_CATEGORIES.map((value) => ({ value, label: capitalize(value) })),
-]
 
 // Page-size choices for the "Rows per page" selector (TICKET_PAGE_SIZE is the default).
 const PAGE_SIZE_OPTIONS = [10, 20, 50]
@@ -262,42 +217,16 @@ function TicketsPage() {
         </CardHeader>
         <CardContent>
           {!isError && (
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-              <div className="relative w-full max-w-xs">
-                <Search className="pointer-events-none absolute top-1/2 left-2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  type="search"
-                  placeholder="Search subject or requester…"
-                  aria-label="Search tickets"
-                  className="pl-8"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
-              <FilterSelect<TicketStatus>
-                label="Filter by status"
-                options={STATUS_OPTIONS}
-                value={status}
-                onChange={setStatus}
-              />
-              <FilterSelect<TicketCategory>
-                label="Filter by category"
-                options={CATEGORY_OPTIONS}
-                value={category}
-                onChange={setCategory}
-              />
-              {hasFilters && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearFilters}
-                >
-                  <X className="size-4" />
-                  Clear
-                </Button>
-              )}
-            </div>
+            <TicketsFilters
+              search={search}
+              onSearchChange={setSearch}
+              status={status}
+              onStatusChange={setStatus}
+              category={category}
+              onCategoryChange={setCategory}
+              hasFilters={hasFilters}
+              onClear={clearFilters}
+            />
           )}
           {isError && (
             <p className="text-sm text-destructive">Failed to load tickets</p>
@@ -310,179 +239,18 @@ function TicketsPage() {
             </p>
           )}
           {!isError && (isPending || tickets.length > 0) && (
-            <Table>
-              <TableHeader>
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => {
-                      const sorted = header.column.getIsSorted()
-                      const align = header.column.columnDef.meta?.align
-                      const SortIcon =
-                        sorted === 'asc'
-                          ? ArrowUp
-                          : sorted === 'desc'
-                            ? ArrowDown
-                            : ChevronsUpDown
-                      return (
-                        <TableHead
-                          key={header.id}
-                          aria-sort={
-                            sorted === 'asc'
-                              ? 'ascending'
-                              : sorted === 'desc'
-                                ? 'descending'
-                                : 'none'
-                          }
-                          className={align === 'right' ? 'text-right' : undefined}
-                        >
-                          <button
-                            type="button"
-                            onClick={header.column.getToggleSortingHandler()}
-                            className={cn(
-                              'inline-flex items-center gap-1 select-none hover:text-foreground',
-                              align === 'right' && 'flex-row-reverse',
-                              sorted
-                                ? 'text-foreground'
-                                : 'text-muted-foreground',
-                            )}
-                          >
-                            {flexRender(
-                              header.column.columnDef.header,
-                              header.getContext(),
-                            )}
-                            <SortIcon
-                              className="size-3.5 shrink-0"
-                              aria-hidden="true"
-                            />
-                          </button>
-                        </TableHead>
-                      )
-                    })}
-                  </TableRow>
-                ))}
-              </TableHeader>
-              <TableBody>
-                {isPending
-                  ? Array.from({ length: 3 }).map((_, i) => (
-                    <TableRow key={i}>
-                      <TableCell>
-                        <Skeleton className="h-4 w-48" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-40" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-5 w-16 rounded-4xl" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-5 w-28 rounded-4xl" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="ml-auto h-4 w-6" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-20" />
-                      </TableCell>
-                    </TableRow>
-                  ))
-                  : table.getRowModel().rows.map((row) => (
-                    <TableRow key={row.id}>
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell
-                          key={cell.id}
-                          className={
-                            cell.column.columnDef.meta?.align === 'right'
-                              ? 'text-right'
-                              : undefined
-                          }
-                        >
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext(),
-                          )}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
-              </TableBody>
-            </Table>
+            <TicketsTable table={table} isPending={isPending} />
           )}
           {!isError && total > 0 && (
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">
-                    Rows per page
-                  </span>
-                  <Select
-                    value={String(pageSize)}
-                    onValueChange={(next) => {
-                      if (next) setPageSize(Number(next))
-                    }}
-                  >
-                    <SelectTrigger
-                      size="sm"
-                      className="w-18"
-                      aria-label="Rows per page"
-                    >
-                      <SelectValue>{(v: string | null) => v}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PAGE_SIZE_OPTIONS.map((n) => (
-                        <SelectItem key={n} value={String(n)}>
-                          {n}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Page {page} of {pageCount} · {total} total
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  aria-label="First page"
-                  disabled={page <= 1}
-                  onClick={() => setPage(1)}
-                >
-                  <ChevronsLeft className="size-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  <ChevronLeft className="size-4" />
-                  Previous
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={page >= pageCount}
-                  onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-                >
-                  Next
-                  <ChevronRight className="size-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  aria-label="Last page"
-                  disabled={page >= pageCount}
-                  onClick={() => setPage(pageCount)}
-                >
-                  <ChevronsRight className="size-4" />
-                </Button>
-              </div>
-            </div>
+            <Pagination
+              page={page}
+              pageCount={pageCount}
+              total={total}
+              pageSize={pageSize}
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
           )}
         </CardContent>
       </Card>
