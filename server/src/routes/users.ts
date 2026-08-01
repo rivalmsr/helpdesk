@@ -106,13 +106,21 @@ usersRouter.delete<{ id: string }>("/:id", requireRole(ROLE.admin), async (req, 
     return;
   }
 
-  // Soft delete: flag the row instead of removing it, and revoke any active
-  // sessions so the deleted user is signed out immediately.
-  await prisma.user.update({
-    where: { id },
-    data: { deletedAt: new Date() },
-  });
-  await prisma.session.deleteMany({ where: { userId: id } });
+  // Soft delete: flag the row instead of removing it, unassign any tickets the
+  // agent owned (a soft delete doesn't fire the `onDelete: SetNull` FK cascade),
+  // and revoke active sessions so the deleted user is signed out immediately.
+  // One transaction so the delete and unassign can't diverge on a partial failure.
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    }),
+    prisma.ticket.updateMany({
+      where: { assigneeId: id },
+      data: { assigneeId: null },
+    }),
+    prisma.session.deleteMany({ where: { userId: id } }),
+  ]);
 
   res.status(204).end();
 });

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { test, expect, type APIRequestContext } from "@playwright/test";
 import { login, ADMIN, AGENT } from "./helpers/auth";
+import { postInboundEmail, uniqueMessageId } from "./helpers/webhook";
 
 /** Unique, parallel-safe user data so specs never collide on email. */
 function newUserData() {
@@ -80,5 +81,39 @@ test.describe("User management (/users)", () => {
     await confirmDialog.getByRole("button", { name: "Delete", exact: true }).click();
 
     await expect(page.getByRole("row").filter({ hasText: data.email })).toHaveCount(0);
+  });
+
+  test("deleting an agent unassigns any ticket assigned to them", async ({ page }) => {
+    await login(page, ADMIN);
+    // POST /api/users always creates an `agent` (server/src/routes/users.ts), so
+    // this owns a fresh agent rather than mutating the seeded AGENT.
+    const agentData = newUserData();
+    const agent = await createUser(page.request, agentData);
+
+    const emailRes = await postInboundEmail(page.request, {
+      from: "customer@e2e.test",
+      subject: `${randomUUID()} unassign on delete check`,
+      text: "body",
+      messageId: uniqueMessageId(),
+    });
+    const { ticketId } = await emailRes.json();
+    const assignRes = await page.request.patch(`/api/tickets/${ticketId}`, {
+      data: { assigneeId: agent.id },
+    });
+    expect(assignRes.ok()).toBe(true);
+
+    await page.goto("/users");
+    const row = page.getByRole("row").filter({ hasText: agentData.email });
+    await row.getByRole("button", { name: `Delete ${agent.name}` }).click();
+    const confirmDialog = page.getByRole("dialog", { name: "Delete user" });
+    await confirmDialog.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(page.getByRole("row").filter({ hasText: agentData.email })).toHaveCount(0);
+
+    const ticketRes = await page.request.get(`/api/tickets/${ticketId}`);
+    const ticket = await ticketRes.json();
+    expect(ticket.assignee).toBeNull();
+
+    await page.goto(`/tickets/${ticketId}`);
+    await expect(page.getByRole("combobox", { name: /assign to/i })).toContainText("Unassigned");
   });
 });
