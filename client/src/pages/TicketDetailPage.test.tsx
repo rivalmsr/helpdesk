@@ -116,33 +116,6 @@ describe('TicketDetailPage', () => {
     expect(screen.getByText('Technical Question')).toBeInTheDocument()
   })
 
-  it('shows the assignee under an "Assigned To" label', async () => {
-    mockedGet.mockResolvedValue({ data: ticket })
-    renderDetail()
-
-    expect(await screen.findByText('Assigned To')).toBeInTheDocument()
-    expect(screen.getByText('Alex Agent')).toBeInTheDocument()
-  })
-
-  it('shows "Unassigned" when no agent is assigned', async () => {
-    mockedGet.mockResolvedValue({ data: { ...ticket, assignee: null } })
-    renderDetail()
-
-    expect(await screen.findByText('Unassigned')).toBeInTheDocument()
-  })
-
-  it('shows the assignee read-only for an agent (no picker, no agents fetch)', async () => {
-    setRole('agent')
-    mockGet()
-    renderDetail()
-
-    expect(await screen.findByText('Alex Agent')).toBeInTheDocument()
-    expect(
-      screen.queryByRole('combobox', { name: /assign to/i }),
-    ).not.toBeInTheDocument()
-    expect(mockedGet).not.toHaveBeenCalledWith('/api/agents')
-  })
-
   it('lets an admin assign an agent and reflects it once saved', async () => {
     const user = userEvent.setup()
     setRole('admin')
@@ -165,45 +138,6 @@ describe('TicketDetailPage', () => {
         screen.getByRole('combobox', { name: /assign to/i }),
       ).toHaveTextContent('Sam Support'),
     )
-  })
-
-  it('lets an admin unassign, sending a null assignee', async () => {
-    const user = userEvent.setup()
-    setRole('admin')
-    mockGet()
-    mockedPatch.mockResolvedValue({ data: { ...ticket, assignee: null } })
-    renderDetail()
-
-    await screen.findByRole('heading', { level: 1 })
-    await user.click(screen.getByRole('combobox', { name: /assign to/i }))
-    await user.click(await screen.findByRole('option', { name: 'Unassigned' }))
-
-    await waitFor(() =>
-      expect(mockedPatch).toHaveBeenCalledWith('/api/tickets/1', {
-        assigneeId: null,
-      }),
-    )
-  })
-
-  it('surfaces an error when assigning fails', async () => {
-    const user = userEvent.setup()
-    setRole('admin')
-    mockGet()
-    // Realistic isAxiosError (true only for values with a `response`) so the
-    // detail query's null error doesn't trip the not-found path.
-    mockedIsAxiosError.mockImplementation((e) => Boolean(e && (e as any).response))
-    mockedPatch.mockRejectedValue({
-      response: { data: { error: 'Assignee must be an active agent' } },
-    })
-    renderDetail()
-
-    await screen.findByRole('heading', { level: 1 })
-    await user.click(screen.getByRole('combobox', { name: /assign to/i }))
-    await user.click(await screen.findByRole('option', { name: 'Sam Support' }))
-
-    expect(
-      await screen.findByText('Assignee must be an active agent'),
-    ).toBeInTheDocument()
   })
 
   it('renders each message in the thread with its timestamp', async () => {

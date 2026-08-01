@@ -1,10 +1,11 @@
 import { Router } from "express";
 import {
   ticketListQuerySchema,
-  assignTicketSchema,
+  updateTicketSchema,
   TICKET_SORT_FIELD,
   ROLE,
 } from "core";
+import type { Role } from "core";
 import type { Prisma } from "../generated/prisma/client";
 import { prisma } from "../lib/prisma";
 import { requireAuth, requireRole } from "../lib/authorize";
@@ -108,13 +109,23 @@ ticketsRouter.get<{ id: string }>("/:id", requireAuth, async (req, res) => {
   res.json(ticket);
 });
 
-// Assign (or unassign) a ticket. Admin-only — assigning work is a management
-// action, mirroring the admin-gated user routes. `assigneeId: null` unassigns;
-// a non-null id must belong to an active agent. Responds with the updated ticket
+// Update a ticket. Any authenticated agent may change the triage fields
+// (`status`/`category`), but assigning (`assigneeId`) is admin-only — assigning
+// work is a management action, mirroring the admin-gated user routes. Only the
+// fields present in the body are changed; `assigneeId: null` unassigns and a
+// non-null id must belong to an active agent. Responds with the updated ticket
 // in the same shape as `GET /:id`.
-ticketsRouter.patch<{ id: string }>("/:id", requireRole(ROLE.admin), async (req, res) => {
-  const data = parseBody(assignTicketSchema, req.body, res);
+ticketsRouter.patch<{ id: string }>("/:id", requireAuth, async (req, res) => {
+  const data = parseBody(updateTicketSchema, req.body, res);
   if (!data) return;
+
+  // `assigneeId` present at all (even `null`) means an assignment change, which
+  // requires admin. `status`/`category` alone are fine for any agent.
+  const changingAssignee = data.assigneeId !== undefined;
+  if (changingAssignee && (req.session!.user.role as Role) !== ROLE.admin) {
+    res.status(403).json({ error: "Only admins can assign tickets" });
+    return;
+  }
 
   const existing = await prisma.ticket.findUnique({
     where: { id: req.params.id },
@@ -125,7 +136,8 @@ ticketsRouter.patch<{ id: string }>("/:id", requireRole(ROLE.admin), async (req,
     return;
   }
 
-  if (data.assigneeId !== null) {
+  // A non-null assignee must be an active agent (soft-deleted users don't count).
+  if (data.assigneeId) {
     const agent = await prisma.user.findUnique({
       where: { id: data.assigneeId },
       select: { role: true, deletedAt: true },
@@ -138,7 +150,11 @@ ticketsRouter.patch<{ id: string }>("/:id", requireRole(ROLE.admin), async (req,
 
   const ticket = await prisma.ticket.update({
     where: { id: req.params.id },
-    data: { assigneeId: data.assigneeId },
+    data: {
+      ...(data.status !== undefined ? { status: data.status } : {}),
+      ...(data.category !== undefined ? { category: data.category } : {}),
+      ...(changingAssignee ? { assigneeId: data.assigneeId } : {}),
+    },
     select: ticketDetailSelect,
   });
 

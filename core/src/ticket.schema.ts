@@ -52,12 +52,20 @@ export const ticketListQuerySchema = z.object({
 export type TicketListQuery = z.infer<typeof ticketListQuerySchema>;
 
 /**
- * Body validation for assigning a ticket (`PATCH /api/tickets/:id`). `assigneeId`
- * is the id of the agent to assign, or `null` to unassign. The route further
- * verifies the id belongs to an active agent before writing it.
+ * Body validation for updating a ticket (`PATCH /api/tickets/:id`). Every field
+ * is optional — only the ones present are changed. `assigneeId` is the id of the
+ * agent to assign or `null` to unassign (the route verifies it's an active agent,
+ * and restricts assignment to admins); `status`/`category` are the triage fields
+ * any agent may change. At least one field must be supplied.
  */
-export const assignTicketSchema = z.object({
-  assigneeId: z.string().nullable(),
-});
+export const updateTicketSchema = z
+  .object({
+    status: z.enum(TICKET_STATUSES).optional(),
+    category: z.enum(TICKET_CATEGORIES).optional(),
+    assigneeId: z.string().nullable().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "No fields to update",
+  });
 
-export type AssignTicketInput = z.infer<typeof assignTicketSchema>;
+export type UpdateTicketInput = z.infer<typeof updateTicketSchema>;
