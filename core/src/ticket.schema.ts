@@ -69,3 +69,14 @@ export const updateTicketSchema = z
   });
 
 export type UpdateTicketInput = z.infer<typeof updateTicketSchema>;
+
+/**
+ * Body validation for an agent reply (`POST /api/tickets/:id/messages`). A reply
+ * is just its `body`; the route stamps the sender (the signed-in agent's email)
+ * and message type server-side. `.trim()` so a whitespace-only reply is rejected.
+ */
+export const createReplySchema = z.object({
+  body: z.string().trim().min(1, "Reply body is required"),
+});
+
+export type CreateReplyInput = z.infer<typeof createReplySchema>;

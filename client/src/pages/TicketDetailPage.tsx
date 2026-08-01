@@ -4,26 +4,15 @@ import axios from 'axios'
 import { ArrowLeft } from 'lucide-react'
 import { TICKET_STATUSES, TICKET_CATEGORIES } from 'core'
 import type { TicketStatus, TicketCategory, TicketMessageType } from 'core'
-import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TicketAssignee } from '@/components/TicketAssignee'
 import { TicketFieldSelect } from '@/components/TicketFieldSelect'
+import { TicketMessageCard } from '@/components/TicketMessageCard'
+import { TicketReplyForm } from '@/components/TicketReplyForm'
 import { cn } from '@/lib/utils'
 import { formatDateTime } from '@/lib/format'
-import {
-  STATUS_LABEL,
-  CATEGORY_LABEL,
-  MESSAGE_TYPE_LABEL,
-} from '@/lib/ticketMeta'
+import { STATUS_LABEL, CATEGORY_LABEL } from '@/lib/ticketMeta'
 
 // Static option lists for the status/category selects, built from the shared
 // enums + their labels (single source of truth in ticketMeta).
@@ -36,7 +25,9 @@ const CATEGORY_OPTIONS = TICKET_CATEGORIES.map((value) => ({
   label: CATEGORY_LABEL[value],
 }))
 
-type TicketMessage = {
+// One entry in a ticket's message thread. Exported for `TicketMessageCard`,
+// which renders a single message.
+export type TicketMessage = {
   id: string
   type: TicketMessageType
   fromEmail: string
@@ -175,25 +166,13 @@ function TicketDetailPage() {
 
           <div className="mt-4 space-y-3">
             {ticket.messages.map((message) => (
-              <Card key={message.id}>
-                <CardHeader>
-                  <CardTitle className="text-sm font-medium">
-                    {message.fromEmail}
-                  </CardTitle>
-                  <CardDescription>
-                    {formatDateTime(message.createdAt)}
-                  </CardDescription>
-                  <CardAction>
-                    <Badge variant="outline">
-                      {MESSAGE_TYPE_LABEL[message.type]}
-                    </Badge>
-                  </CardAction>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm whitespace-pre-wrap">{message.body}</p>
-                </CardContent>
-              </Card>
+              <TicketMessageCard key={message.id} message={message} />
             ))}
+          </div>
+
+          {/* Reply composer, below the thread. */}
+          <div className="mt-6 border-t pt-6">
+            <TicketReplyForm ticketId={ticket.id} />
           </div>
         </>
       )}

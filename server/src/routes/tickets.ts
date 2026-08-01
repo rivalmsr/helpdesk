@@ -1,8 +1,11 @@
 import { Router } from "express";
+import { randomUUID } from "node:crypto";
 import {
   ticketListQuerySchema,
   updateTicketSchema,
+  createReplySchema,
   TICKET_SORT_FIELD,
+  TICKET_MESSAGE_TYPE,
   ROLE,
 } from "core";
 import type { Role } from "core";
@@ -160,3 +163,45 @@ ticketsRouter.patch<{ id: string }>("/:id", requireAuth, async (req, res) => {
 
   res.json(ticket);
 });
+
+// Post an agent reply to a ticket's thread. Any authenticated agent may reply;
+// the sender is the signed-in user (never client-supplied) and the entry is
+// typed `agent_reply`. Bumps the ticket's `updatedAt` in the same transaction so
+// the reply counts as activity, and responds with the updated ticket in the same
+// shape as `GET /:id` (so the client can drop it straight into its cache).
+ticketsRouter.post<{ id: string }>(
+  "/:id/messages",
+  requireAuth,
+  async (req, res) => {
+    const data = parseBody(createReplySchema, req.body, res);
+    if (!data) return;
+
+    const existing = await prisma.ticket.findUnique({
+      where: { id: req.params.id },
+      select: { id: true },
+    });
+    if (!existing) {
+      res.status(404).json({ error: "Ticket not found" });
+      return;
+    }
+
+    const [, ticket] = await prisma.$transaction([
+      prisma.ticketMessage.create({
+        data: {
+          id: randomUUID(),
+          ticketId: req.params.id,
+          type: TICKET_MESSAGE_TYPE.agent_reply,
+          fromEmail: req.session!.user.email,
+          body: data.body,
+        },
+      }),
+      prisma.ticket.update({
+        where: { id: req.params.id },
+        data: { updatedAt: new Date() },
+        select: ticketDetailSelect,
+      }),
+    ]);
+
+    res.status(201).json(ticket);
+  },
+);
