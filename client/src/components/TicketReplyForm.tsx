@@ -2,7 +2,11 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
-import { createReplySchema, type CreateReplyInput } from 'core'
+import {
+  createReplySchema,
+  TICKET_BODY_MAX_LENGTH,
+  type CreateReplyInput,
+} from 'core'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -47,6 +51,7 @@ export function TicketReplyForm({ ticketId }: { ticketId: string }) {
           <Textarea
             id="reply-body"
             rows={4}
+            maxLength={TICKET_BODY_MAX_LENGTH}
             placeholder="Write a reply…"
             aria-invalid={!!errors.body}
             {...register('body')}

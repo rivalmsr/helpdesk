@@ -4,6 +4,8 @@ import {
   TICKET_SORT_FIELD,
   TICKET_STATUSES,
   TICKET_CATEGORIES,
+  TICKET_SUBJECT_MAX_LENGTH,
+  TICKET_BODY_MAX_LENGTH,
 } from "./ticket";
 
 /**
@@ -18,8 +20,15 @@ export const inboundEmailSchema = z.object({
     .string()
     .trim()
     .pipe(z.email("Enter a valid sender email address")),
-  subject: z.string().trim().default(""),
-  text: z.string().min(1, "Email body is required"),
+  subject: z
+    .string()
+    .trim()
+    .max(TICKET_SUBJECT_MAX_LENGTH, "Subject is too long")
+    .default(""),
+  text: z
+    .string()
+    .min(1, "Email body is required")
+    .max(TICKET_BODY_MAX_LENGTH, "Email body is too long"),
   messageId: z.string().trim().min(1).optional(),
   inReplyTo: z.string().trim().min(1).optional(),
   references: z.array(z.string().trim().min(1)).optional(),
@@ -76,7 +85,11 @@ export type UpdateTicketInput = z.infer<typeof updateTicketSchema>;
  * and message type server-side. `.trim()` so a whitespace-only reply is rejected.
  */
 export const createReplySchema = z.object({
-  body: z.string().trim().min(1, "Reply body is required"),
+  body: z
+    .string()
+    .trim()
+    .min(1, "Reply body is required")
+    .max(TICKET_BODY_MAX_LENGTH, "Reply body is too long"),
 });
 
 export type CreateReplyInput = z.infer<typeof createReplySchema>;

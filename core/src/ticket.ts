@@ -77,3 +77,15 @@ export const TICKET_MESSAGE_TYPES = [
 ] as const;
 
 export type TicketMessageType = (typeof TICKET_MESSAGE_TYPES)[number];
+
+/**
+ * Maximum accepted lengths for free-text ticket content, enforced by the shared
+ * Zod schemas (`ticket.schema.ts`) so oversized input is rejected with a clean
+ * `400` before it reaches the DB, and mirrored as `@db.VarChar(...)` backstops on
+ * the `Ticket.subject` / `TicketMessage.body` columns in `schema.prisma` (keep
+ * those literals in sync with these values). `body` covers both inbound emails
+ * and agent replies; 50k is generous for a long quoted thread while still capping
+ * abusive multi-megabyte payloads.
+ */
+export const TICKET_SUBJECT_MAX_LENGTH = 200;
+export const TICKET_BODY_MAX_LENGTH = 50_000;

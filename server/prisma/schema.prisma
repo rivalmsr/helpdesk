@@ -83,7 +83,8 @@ model Verification {
 
 model Ticket {
   id             String          @id
-  subject        String
+  // Length backstop mirrors TICKET_SUBJECT_MAX_LENGTH in core/src/ticket.ts.
+  subject        String          @db.VarChar(200)
   requesterEmail String
   status         TicketStatus    @default(open)
   category       TicketCategory  @default(general)
@@ -116,7 +117,8 @@ model TicketMessage {
   ticket    Ticket            @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   type      TicketMessageType @default(inbound)
   fromEmail String
-  body      String
+  // Length backstop mirrors TICKET_BODY_MAX_LENGTH in core/src/ticket.ts.
+  body      String            @db.VarChar(50000)
   messageId String?           @unique
   inReplyTo String?
   createdAt DateTime          @default(now())
