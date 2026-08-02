@@ -6,6 +6,7 @@ import { usersRouter } from "./routes/users";
 import { inboundEmailRouter } from "./routes/inbound-email";
 import { ticketsRouter } from "./routes/tickets";
 import { agentsRouter } from "./routes/agents";
+import { startQueue } from "./lib/queue";
 
 const app = express();
 const port = process.env.PORT ?? 3001;
@@ -33,3 +34,9 @@ app.use("/api/agents", agentsRouter);
 app.listen(port, () => {
   console.log(`Server listening on http://localhost:${port}`);
 });
+
+// Start the pg-boss job queue (ticket classification worker). Non-fatal: if it
+// can't start, the API still serves — tickets just keep their default category.
+startQueue()
+  .then(() => console.log("Job queue started"))
+  .catch((err) => console.error("Failed to start job queue", err));
