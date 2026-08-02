@@ -2,6 +2,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
+import { Sparkles } from 'lucide-react'
 import {
   createReplySchema,
   TICKET_BODY_MAX_LENGTH,
@@ -22,6 +23,9 @@ export function TicketReplyForm({ ticketId }: { ticketId: string }) {
     register,
     handleSubmit,
     reset,
+    setValue,
+    getValues,
+    watch,
     formState: { errors },
   } = useForm<CreateReplyInput>({ resolver: zodResolver(createReplySchema) })
 
@@ -39,6 +43,24 @@ export function TicketReplyForm({ ticketId }: { ticketId: string }) {
       reset({ body: '' })
     },
   })
+
+  // Sends the current draft to the AI polish endpoint and replaces the textarea
+  // with the improved text (via setValue — the field is uncontrolled/registered).
+  const polishMutation = useMutation({
+    mutationFn: async () => {
+      const res = await axios.post<{ text: string }>(
+        `/api/tickets/${ticketId}/polish-reply`,
+        { body: getValues('body') },
+      )
+      return res.data.text
+    },
+    onSuccess: (text) => {
+      setValue('body', text, { shouldValidate: true, shouldDirty: true })
+    },
+  })
+
+  const body = watch('body')
+  const isBusy = mutation.isPending || polishMutation.isPending
 
   return (
     <form
@@ -63,8 +85,22 @@ export function TicketReplyForm({ ticketId }: { ticketId: string }) {
             {getServerErrorMessage(mutation.error, 'Failed to send reply')}
           </FieldError>
         )}
-        <div>
-          <Button type="submit" disabled={mutation.isPending}>
+        {polishMutation.isError && (
+          <FieldError>
+            {getServerErrorMessage(polishMutation.error, 'Failed to polish reply')}
+          </FieldError>
+        )}
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => polishMutation.mutate()}
+            disabled={isBusy || !body?.trim()}
+          >
+            <Sparkles className="size-4" />
+            {polishMutation.isPending ? 'Polishing…' : 'Polish'}
+          </Button>
+          <Button type="submit" disabled={isBusy}>
             {mutation.isPending ? 'Sending…' : 'Send reply'}
           </Button>
         </div>

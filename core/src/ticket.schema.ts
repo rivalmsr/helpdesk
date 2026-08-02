@@ -93,3 +93,18 @@ export const createReplySchema = z.object({
 });
 
 export type CreateReplyInput = z.infer<typeof createReplySchema>;
+
+/**
+ * Body validation for polishing a draft reply (`POST /api/tickets/:id/polish-reply`).
+ * Same `{ body }` shape as `createReplySchema` — the route sends the agent's draft
+ * to the AI model, which returns an improved version; nothing is persisted.
+ */
+export const polishReplySchema = z.object({
+  body: z
+    .string()
+    .trim()
+    .min(1, "Reply body is required")
+    .max(TICKET_BODY_MAX_LENGTH, "Reply body is too long"),
+});
+
+export type PolishReplyInput = z.infer<typeof polishReplySchema>;

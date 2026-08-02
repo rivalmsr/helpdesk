@@ -4,6 +4,7 @@ import {
   ticketListQuerySchema,
   updateTicketSchema,
   createReplySchema,
+  polishReplySchema,
   TICKET_SORT_FIELD,
   TICKET_MESSAGE_TYPE,
   ROLE,
@@ -13,6 +14,7 @@ import type { Prisma } from "../generated/prisma/client";
 import { prisma } from "../lib/prisma";
 import { requireAuth, requireRole } from "../lib/authorize";
 import { parseBody } from "../lib/validate";
+import { polishReply } from "../lib/ai";
 
 export const ticketsRouter = Router();
 
@@ -205,3 +207,48 @@ ticketsRouter.post<{ id: string }>(
     res.status(201).json(ticket);
   },
 );
+
+// POST /api/tickets/:id/polish-reply — improve an agent's draft reply with AI.
+// Takes the draft `body`, returns an improved `{ text }`; nothing is persisted
+// (the composer swaps the draft for the result). Looks up the ticket for the
+// requester email so the polish can greet the customer by first name, and signs
+// off with the agent's name (from the session, never the client). A 502 is
+// returned when the AI call fails (e.g. `OPENAI_API_KEY` unset or upstream error).
+ticketsRouter.post<{ id: string }>(
+  "/:id/polish-reply",
+  requireAuth,
+  async (req, res) => {
+    const data = parseBody(polishReplySchema, req.body, res);
+    if (!data) return;
+
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: req.params.id },
+      select: { requesterEmail: true },
+    });
+    if (!ticket) {
+      res.status(404).json({ error: "Ticket not found" });
+      return;
+    }
+
+    try {
+      const text = await polishReply(data.body, {
+        agentName: req.session!.user.name,
+        customerFirstName: firstNameFromEmail(ticket.requesterEmail),
+      });
+      res.json({ text });
+    } catch {
+      res.status(502).json({ error: "Failed to polish reply" });
+    }
+  },
+);
+
+// Best-effort first name from an email address (the ticket stores no requester
+// name): the local part's first token, split on common separators and
+// capitalized — `jane.doe@x.com` -> "Jane". Falls back to "there" ("Hi there,").
+function firstNameFromEmail(email: string): string {
+  const local = email.split("@")[0] ?? "";
+  const first = local.split(/[._+-]/)[0] ?? "";
+  return first
+    ? first.charAt(0).toUpperCase() + first.slice(1).toLowerCase()
+    : "there";
+}

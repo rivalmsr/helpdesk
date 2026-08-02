@@ -61,4 +61,42 @@ describe('TicketReplyForm', () => {
 
     expect(await screen.findByText('Ticket not found')).toBeInTheDocument()
   })
+
+  it('polishes the draft and replaces the textarea with the improved text', async () => {
+    const user = userEvent.setup()
+    mockedPost.mockResolvedValue({ data: { text: 'polished!' } })
+    renderWithQueryClient(<TicketReplyForm ticketId="42" />)
+
+    const textarea = screen.getByRole('textbox', { name: /reply/i })
+    await user.type(textarea, 'plz fix asap')
+    await user.click(screen.getByRole('button', { name: /polish/i }))
+
+    await waitFor(() =>
+      expect(mockedPost).toHaveBeenCalledWith('/api/tickets/42/polish-reply', {
+        body: 'plz fix asap',
+      }),
+    )
+    await waitFor(() => expect(textarea).toHaveValue('polished!'))
+  })
+
+  it('disables Polish while the draft is empty', () => {
+    renderWithQueryClient(<TicketReplyForm ticketId="42" />)
+
+    expect(screen.getByRole('button', { name: /polish/i })).toBeDisabled()
+    expect(mockedPost).not.toHaveBeenCalled()
+  })
+
+  it("surfaces the server's error message when polishing fails", async () => {
+    const user = userEvent.setup()
+    mockedIsAxiosError.mockReturnValue(true)
+    mockedPost.mockRejectedValue({
+      response: { data: { error: 'Failed to polish reply' } },
+    })
+    renderWithQueryClient(<TicketReplyForm ticketId="42" />)
+
+    await user.type(screen.getByRole('textbox', { name: /reply/i }), 'Hello')
+    await user.click(screen.getByRole('button', { name: /polish/i }))
+
+    expect(await screen.findByText('Failed to polish reply')).toBeInTheDocument()
+  })
 })
