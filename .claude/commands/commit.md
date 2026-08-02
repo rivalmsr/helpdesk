@@ -1,6 +1,6 @@
 ---
 description: Write a commit message in Angular Conventional Commits style
-allowed-tools: Bash(git diff:*), Bash(git status:*), Bash(git log:*), Bash(git commit:*), Bash(pbcopy:*)
+allowed-tools: Bash(git diff:*), Bash(git status:*), Bash(git log:*), Bash(pbcopy:*)
 argument-hint: [optional scope or context]
 ---
 
@@ -14,16 +14,12 @@ argument-hint: [optional scope or context]
 
 ## Instructions
 
-Write a commit message for the staged changes above, following the **Angular Conventional Commits** convention.
+Write a **single subject line** for the staged changes above, following the **Angular Conventional Commits** convention. Do NOT write a body or footer — subject line only.
 
 ### Format
 
 ```
 <type>(<scope>): <subject>
-
-<body>
-
-<footer>
 ```
 
 ### 1. Type — pick exactly one
@@ -57,32 +53,16 @@ Write a commit message for the staged changes above, following the **Angular Con
 - No capital letter after the colon.
 - No period at the end.
 
-### 4. Body (optional — only if the change needs explaining)
-
-- One blank line after the subject.
-- Wrap lines at 72 characters.
-- Explain *why*, not a restatement of the diff.
-- Use `-` bullets for multiple points.
-
-### 5. Footer (optional)
-
-- `BREAKING CHANGE: <description>` if the commit introduces a breaking API change.
-- `Closes #123` / `Refs #123` if there's an issue reference (check `$ARGUMENTS` for one).
-
 ### Do not
 
+- Do not write a body or footer — only the subject line.
 - Do not guess a scope that doesn't match the actual changed files.
 - Do not write vague subjects like "update code" or "fix stuff".
-- Do not add a body if the subject already says everything necessary.
 
 ### Output
 
-1. Show the drafted commit message in a code block first.
-2. Copy the exact commit message text to the clipboard by piping it to `pbcopy`, e.g.:
-   ```bash
-   printf '%s' "$COMMIT_MESSAGE" | pbcopy
-   ```
-   Use `printf '%s'` (not `echo`) so multi-line messages (subject + body + footer) are copied exactly, without an extra trailing newline issue. Confirm to the user that it's been copied.
-3. Then ask whether to run `git commit -m "..."` with it directly, or let the user paste the copied message themselves — unless the user already confirmed to commit directly.
+1. Show the drafted subject line in a code block.
+2. Copy it to the clipboard with `printf '%s' "<subject>" | pbcopy` and confirm it's copied.
+3. Stop. Do not ask any follow-up questions and do not run `git commit`.
 
 If `$ARGUMENTS` is provided, treat it as a hint for the scope or extra context (e.g. an issue number, or "scope: payments") and use it instead of guessing.
