@@ -8,6 +8,7 @@ import { TicketDetailHeader } from '@/components/TicketDetailHeader'
 import { TicketDetailSkeleton } from '@/components/TicketDetailSkeleton'
 import { TicketMessageCard } from '@/components/TicketMessageCard'
 import { TicketReplyForm } from '@/components/TicketReplyForm'
+import { TicketSummary } from '@/components/TicketSummary'
 import { cn } from '@/lib/utils'
 
 // One entry in a ticket's message thread. Exported for `TicketMessageCard`,
@@ -79,6 +80,8 @@ function TicketDetailPage() {
       {!isError && !isPending && (
         <>
           <TicketDetailHeader ticket={ticket} />
+
+          <TicketSummary ticketId={ticket.id} />
 
           <div className="mt-4 space-y-3">
             {ticket.messages.map((message) => (

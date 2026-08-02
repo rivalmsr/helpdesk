@@ -46,3 +46,49 @@ export async function polishReply(
 
   return text.trim();
 }
+
+/** One message in the thread the summary is generated from (oldest-first). */
+export type TicketSummaryMessage = {
+  /** Who sent it — the requester's email or an agent's email. */
+  fromEmail: string;
+  /** The message body. */
+  body: string;
+};
+
+/**
+ * Summarizes a ticket and its conversation history into a short brief an agent
+ * can skim before jumping in, using OpenAI `gpt-5-nano` via the Vercel AI SDK.
+ * The model sees the subject and the full thread (oldest-first) and returns a
+ * few plain-text sentences: what the customer needs, what's happened, and where
+ * things stand. Nothing is persisted — the route hands the result to the client,
+ * which re-requests it on demand.
+ *
+ * Throws if `OPENAI_API_KEY` isn't configured, mirroring {@link polishReply}, so
+ * the route can surface a clean error.
+ */
+export async function summarizeTicket(
+  subject: string,
+  messages: TicketSummaryMessage[],
+): Promise<string> {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY is not configured");
+  }
+
+  const transcript = messages
+    .map((m) => `${m.fromEmail}:\n${m.body}`)
+    .join("\n\n---\n\n");
+
+  const { text } = await generateText({
+    model: openai("gpt-5-nano"),
+    instructions:
+      "You are a support assistant summarizing a customer support ticket for an " +
+      "agent who is about to work it. Read the subject and the conversation thread " +
+      "(oldest message first) and write a concise summary: what the customer needs, " +
+      "what has happened so far, and the current state or any open question. " +
+      "Keep it to a short paragraph or a few sentences of plain text — no headings, " +
+      "no markdown, no preamble. Base it only on the thread; don't invent details.",
+    prompt: `Subject: ${subject}\n\nConversation:\n${transcript}`,
+  });
+
+  return text.trim();
+}

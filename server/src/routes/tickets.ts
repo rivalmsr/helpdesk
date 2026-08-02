@@ -14,7 +14,7 @@ import type { Prisma } from "../generated/prisma/client";
 import { prisma } from "../lib/prisma";
 import { requireAuth, requireRole } from "../lib/authorize";
 import { parseBody } from "../lib/validate";
-import { polishReply } from "../lib/ai";
+import { polishReply, summarizeTicket } from "../lib/ai";
 
 export const ticketsRouter = Router();
 
@@ -238,6 +238,39 @@ ticketsRouter.post<{ id: string }>(
       res.json({ text });
     } catch {
       res.status(502).json({ error: "Failed to polish reply" });
+    }
+  },
+);
+
+// POST /api/tickets/:id/summarize — generate an AI summary of the ticket and its
+// full conversation history. Nothing is persisted: the client re-requests this on
+// demand (each click regenerates), so no schema/body is needed — the ticket id in
+// the URL is enough. Returns `{ summary }`; `404` if the ticket is unknown and a
+// `502` when the AI call fails (e.g. `OPENAI_API_KEY` unset or upstream error).
+ticketsRouter.post<{ id: string }>(
+  "/:id/summarize",
+  requireAuth,
+  async (req, res) => {
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: req.params.id },
+      select: {
+        subject: true,
+        messages: {
+          select: { fromEmail: true, body: true },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+    if (!ticket) {
+      res.status(404).json({ error: "Ticket not found" });
+      return;
+    }
+
+    try {
+      const summary = await summarizeTicket(ticket.subject, ticket.messages);
+      res.json({ summary });
+    } catch {
+      res.status(502).json({ error: "Failed to summarize ticket" });
     }
   },
 );
