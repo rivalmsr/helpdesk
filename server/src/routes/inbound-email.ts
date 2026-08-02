@@ -4,8 +4,28 @@ import { inboundEmailSchema, TICKET_MESSAGE_TYPE, TICKET_STATUS } from "core";
 import { prisma } from "../lib/prisma";
 import { parseBody } from "../lib/validate";
 import { verifyWebhookSecret } from "../lib/webhookAuth";
+import { classifyTicket } from "../lib/ai";
 
 export const inboundEmailRouter = Router();
+
+/**
+ * Fire-and-forget AI classification for a freshly created ticket: classify from
+ * the subject + first message and persist the category, off the request path so
+ * the webhook responds without waiting on the LLM. Deliberately not awaited;
+ * failures (e.g. `OPENAI_API_KEY` unset or an upstream error) are logged and the
+ * ticket simply keeps its default `general` category.
+ */
+function classifyTicketInBackground(
+  ticketId: string,
+  subject: string,
+  body: string,
+): void {
+  classifyTicket(subject, body)
+    .then((category) =>
+      prisma.ticket.update({ where: { id: ticketId }, data: { category } }),
+    )
+    .catch((err) => console.error("Failed to classify ticket", ticketId, err));
+}
 
 /**
  * Inbound-email webhook: turns a support email into a ticket.
@@ -90,6 +110,12 @@ inboundEmailRouter.post("/", verifyWebhookSecret, async (req, res) => {
         },
       },
     });
+
+    // Non-blocking: kick off AI classification, then respond immediately. The
+    // ticket starts at its `general` default and flips to the AI's pick once the
+    // background call finishes.
+    classifyTicketInBackground(ticketId, subject, text);
+
     res.status(201).json({ ticketId, created: true });
   } catch (error) {
     console.error("Failed to process inbound email:", error);

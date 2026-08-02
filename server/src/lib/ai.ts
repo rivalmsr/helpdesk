@@ -1,5 +1,6 @@
-import { generateText } from "ai";
+import { generateText, Output } from "ai";
 import { openai } from "@ai-sdk/openai";
+import { TICKET_CATEGORIES, TICKET_CATEGORY, type TicketCategory } from "core";
 
 /** Context the polish needs to personalize the greeting and sign-off. */
 export type PolishContext = {
@@ -91,4 +92,36 @@ export async function summarizeTicket(
   });
 
   return text.trim();
+}
+
+/**
+ * Classifies a ticket into one of the {@link TICKET_CATEGORIES} from its subject
+ * and first message, using OpenAI `gpt-5-nano` via the Vercel AI SDK. Uses the
+ * SDK's `Output.choice` so the result is guaranteed to be a valid category (the
+ * model is constrained to the option list — no free-text parsing needed).
+ *
+ * Throws if `OPENAI_API_KEY` isn't configured, mirroring {@link polishReply}, so
+ * the caller can surface/log a clean error. The inbound-email route runs this
+ * fire-and-forget after responding, so a throw never affects the webhook.
+ */
+export async function classifyTicket(
+  subject: string,
+  body: string,
+): Promise<TicketCategory> {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY is not configured");
+  }
+
+  const { output } = await generateText({
+    model: openai("gpt-5-nano"),
+    output: Output.choice({ options: [...TICKET_CATEGORIES] }),
+    prompt:
+      "Classify this support ticket into exactly one category. " +
+      `"${TICKET_CATEGORY.technical}" = product bugs, errors, how-to/setup issues; ` +
+      `"${TICKET_CATEGORY.refund}" = refunds, billing, charges, cancellations; ` +
+      `"${TICKET_CATEGORY.general}" = anything else.\n\n` +
+      `Subject: ${subject}\n\nMessage:\n${body}`,
+  });
+
+  return output;
 }
