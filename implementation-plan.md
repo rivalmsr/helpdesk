@@ -48,13 +48,17 @@ Based on `project-scope.md` and `tech-stack.md`. Stack: React + TS + Tailwind + 
 
 ## Phase 6 — AI Features
 
-- [ ] Backend: Claude API client wrapper + prompt templates (shared service)
-- [ ] AI ticket classification: auto-assign category on ticket creation, editable by agent
-- [ ] AI summary: generate + store a thread summary, shown on ticket detail
+> **Status / deviation:** the AI service is built on **OpenAI `gpt-5-nano` via the Vercel AI SDK** (`server/src/lib/ai.ts`), not the Claude API originally planned. Classification, summaries, and reply polish ship; the knowledge base and KB-grounded suggested replies do not yet.
+
+- [x] Backend: LLM client wrapper + prompt templates (`server/src/lib/ai.ts`) — _uses OpenAI via the Vercel AI SDK instead of the Claude API_
+- [x] AI ticket classification: auto-assign category on ticket creation, editable by agent — _runs off the request path via a **pg-boss** job queue (`server/src/lib/queue.ts`) so the inbound webhook stays fast_
+- [x] AI summary: generate a thread summary, shown on ticket detail — _generated on demand (re-run each click); **not** stored in the DB_
+- [x] AI reply polish: rewrite an agent's draft reply for clarity/tone (added beyond the original plan; not persisted)
 - [ ] Knowledge base: admin CRUD for KB articles
 - [ ] Knowledge base retrieval: Postgres full-text search to find articles relevant to a ticket
 - [ ] AI-suggested reply: prompt combining ticket thread + summary + relevant KB articles
-- [ ] Frontend: AI category badge (editable), AI summary panel, AI-suggested reply (editable before send)
+- [x] Frontend: AI category badge (editable) + AI summary panel (`TicketSummary`) + AI polish button in the reply composer
+- [ ] Frontend: AI-suggested reply (editable before send)
 - [ ] Frontend: admin KB management UI
 
 ## Phase 7 — Dashboard

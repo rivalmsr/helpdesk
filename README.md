@@ -10,6 +10,8 @@ See [`project-scope.md`](./project-scope.md) for the full feature scope, [`tech-
 - **Server**: Express 5 + TypeScript
 - **Database**: PostgreSQL via Prisma 7
 - **Auth**: Better Auth (email/password, `admin`/`agent` roles)
+- **AI**: OpenAI `gpt-5-nano` via the Vercel AI SDK (ticket classification, summaries, reply polish)
+- **Background jobs**: pg-boss (Postgres-backed queue — runs ticket classification off the request path)
 - **Runtime/package manager**: Bun (workspaces monorepo — `client`, `server`, and a shared `core` package)
 
 ## Getting Started
@@ -30,11 +32,16 @@ Requires [Bun](https://bun.sh) and a local **PostgreSQL** database.
    BETTER_AUTH_URL="http://localhost:3001"
    ADMIN_EMAIL="admin@example.com"
    ADMIN_PASSWORD="password123"
+   # Required for the AI features (classification, summaries, reply polish)
+   OPENAI_API_KEY="sk-..."
    # Optional: also seed an agent, and secure the inbound-email webhook
    AGENT_EMAIL="agent@example.com"
    AGENT_PASSWORD="password123"
    INBOUND_EMAIL_SECRET="a-shared-webhook-secret"
    ```
+
+   > pg-boss (the background job queue) creates its own `pgboss` schema in this
+   > same database on first run — no extra setup or migration needed.
 
 3. **Set up the database** (from `server/`):
 
@@ -85,4 +92,4 @@ e2e/      Playwright end-to-end specs
 
 ## Status
 
-Built so far: project scaffolding, authentication and admin user management, inbound email ingestion, and the agent-facing ticket UI (list + detail). The AI features (classification, summaries, suggested replies, knowledge base) are not built yet — see [`implementation-plan.md`](./implementation-plan.md) for the roadmap.
+Built so far: project scaffolding, authentication and admin user management, inbound email ingestion, and the agent-facing ticket UI (list + detail). The first AI features are in place: **automatic ticket classification** (runs on inbound email via a pg-boss queue), **on-demand thread summaries**, and **AI polish for draft replies** — all on OpenAI `gpt-5-nano` via the Vercel AI SDK. Still to come from Phase 6: the knowledge base and AI-suggested reply drafts. See [`implementation-plan.md`](./implementation-plan.md) for the roadmap.
