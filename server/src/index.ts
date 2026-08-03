@@ -6,6 +6,7 @@ import { usersRouter } from "./routes/users";
 import { inboundEmailRouter } from "./routes/inbound-email";
 import { ticketsRouter } from "./routes/tickets";
 import { agentsRouter } from "./routes/agents";
+import { statsRouter } from "./routes/stats";
 import { startQueue } from "./lib/queue";
 
 const app = express();
@@ -30,6 +31,7 @@ app.use("/api/users", usersRouter);
 app.use("/api/inbound-email", inboundEmailRouter);
 app.use("/api/tickets", ticketsRouter);
 app.use("/api/agents", agentsRouter);
+app.use("/api/stats", statsRouter);
 
 app.listen(port, () => {
   console.log(`Server listening on http://localhost:${port}`);

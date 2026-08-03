@@ -26,6 +26,9 @@ function NavBar() {
           <Link to="/" className="font-semibold">
             Helpdesk
           </Link>
+          <NavLink to="/" end className={navLinkClassName}>
+            Dashboard
+          </NavLink>
           <NavLink to="/tickets" className={navLinkClassName}>
             Tickets
           </NavLink>

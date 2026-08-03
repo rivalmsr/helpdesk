@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router'
 import { ROLE, type Role } from 'core'
 import { useSession } from './lib/auth-client'
 import LoginPage from './pages/LoginPage'
-import HomePage from './pages/HomePage'
+import DashboardPage from './pages/DashboardPage'
 import UsersPage from './pages/UsersPage'
 import TicketsPage from './pages/TicketsPage'
 import TicketDetailPage from './pages/TicketDetailPage'
@@ -59,7 +59,7 @@ function AppRoutes() {
         path="/"
         element={
           <ProtectedRoute>
-            <HomePage />
+            <DashboardPage />
           </ProtectedRoute>
         }
       />
