@@ -4,7 +4,7 @@ import { inboundEmailSchema, TICKET_MESSAGE_TYPE, TICKET_STATUS } from "core";
 import { prisma } from "../lib/prisma";
 import { parseBody } from "../lib/validate";
 import { verifyWebhookSecret } from "../lib/webhookAuth";
-import { enqueueClassifyTicket } from "../lib/queue";
+import { enqueueTriageTicket } from "../lib/queue";
 
 export const inboundEmailRouter = Router();
 
@@ -92,10 +92,11 @@ inboundEmailRouter.post("/", verifyWebhookSecret, async (req, res) => {
       },
     });
 
-    // Non-blocking: durably enqueue AI classification (a fast Postgres insert),
-    // then respond immediately. The ticket starts at its `general` default and a
-    // pg-boss worker flips it to the AI's pick once the job runs.
-    await enqueueClassifyTicket({ ticketId, subject, body: text });
+    // Non-blocking: durably enqueue AI triage (a fast Postgres insert), then
+    // respond immediately. The ticket starts `new`/`general`; a pg-boss worker
+    // classifies it and either auto-resolves it from the knowledge base
+    // (`ai_resolved` + an `ai_reply`) or hands it to a human (`open`).
+    await enqueueTriageTicket({ ticketId, subject, body: text });
 
     res.status(201).json({ ticketId, created: true });
   } catch (error) {

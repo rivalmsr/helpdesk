@@ -1,20 +1,42 @@
-import { TICKET_STATUSES, TICKET_CATEGORIES } from 'core'
+import {
+  AGENT_TICKET_STATUSES,
+  TICKET_CATEGORIES,
+  type TicketStatus,
+} from 'core'
 import { TicketAssignee } from '@/components/TicketAssignee'
 import { TicketFieldSelect } from '@/components/TicketFieldSelect'
 import { formatDateTime } from '@/lib/format'
 import { STATUS_LABEL, CATEGORY_LABEL } from '@/lib/ticketMeta'
 import type { TicketDetail } from '@/pages/TicketDetailPage'
 
-// Static option lists for the status/category selects, built from the shared
-// enums + their labels (single source of truth in ticketMeta).
-const STATUS_OPTIONS = TICKET_STATUSES.map((value) => ({
-  value,
+// Option lists for the status/category selects, built from the shared enums +
+// their labels (single source of truth in ticketMeta). Agents may only set the
+// agent-facing statuses (open/resolved/closed) — the AI-owned ones
+// (new/processing/ai_resolved) are driven by the triage pipeline.
+const AGENT_STATUS_OPTIONS = AGENT_TICKET_STATUSES.map((value) => ({
+  value: value as TicketStatus,
   label: STATUS_LABEL[value],
 }))
 const CATEGORY_OPTIONS = TICKET_CATEGORIES.map((value) => ({
   value,
   label: CATEGORY_LABEL[value],
 }))
+
+// The status options for a given ticket: the agent-settable statuses, plus — when
+// the ticket is currently in an AI-owned status — that status as a disabled entry
+// so the select still displays its label (e.g. "AI Resolved") without letting an
+// agent pick it (the API would reject it anyway).
+function statusOptionsFor(status: TicketStatus) {
+  const isAgentStatus = (AGENT_TICKET_STATUSES as readonly TicketStatus[]).includes(
+    status,
+  )
+  return isAgentStatus
+    ? AGENT_STATUS_OPTIONS
+    : [
+        { value: status, label: STATUS_LABEL[status], disabled: true },
+        ...AGENT_STATUS_OPTIONS,
+      ]
+}
 
 // The ticket detail page's title area: subject, read-only requester/opened
 // metadata, and the editable status/category/assignee controls. A plain block
@@ -39,6 +61,12 @@ export function TicketDetailHeader({ ticket }: { ticket: TicketDetail }) {
             {formatDateTime(ticket.createdAt)}
           </dd>
         </div>
+        <div className="flex gap-1.5">
+          <dt>Updated</dt>
+          <dd className="font-medium text-foreground">
+            {formatDateTime(ticket.updatedAt)}
+          </dd>
+        </div>
       </dl>
 
       {/* Editable controls, aligned in their own row so the selects line up. */}
@@ -50,7 +78,7 @@ export function TicketDetailHeader({ ticket }: { ticket: TicketDetail }) {
               ticketId={ticket.id}
               field="status"
               value={ticket.status}
-              options={STATUS_OPTIONS}
+              options={statusOptionsFor(ticket.status)}
               ariaLabel="Change status"
             />
           </div>

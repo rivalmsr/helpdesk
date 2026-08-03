@@ -11,7 +11,7 @@ import {
 import { getServerErrorMessage } from '@/lib/http'
 import type { TicketDetail } from '@/pages/TicketDetailPage'
 
-type Option<T extends string> = { value: T; label: string }
+type Option<T extends string> = { value: T; label: string; disabled?: boolean }
 
 // An inline, instant-save select for one of a ticket's enum fields (status /
 // category). Picking a value PATCHes just that field and drops the fresh ticket
@@ -65,7 +65,7 @@ export function TicketFieldSelect<T extends string>({
         </SelectTrigger>
         <SelectContent>
           {options.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value}>
+            <SelectItem key={opt.value} value={opt.value} disabled={opt.disabled}>
               {opt.label}
             </SelectItem>
           ))}

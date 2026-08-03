@@ -1,5 +1,6 @@
 import { generateText, Output } from "ai";
 import { openai } from "@ai-sdk/openai";
+import { z } from "zod";
 import { TICKET_CATEGORIES, TICKET_CATEGORY, type TicketCategory } from "core";
 
 /** Context the polish needs to personalize the greeting and sign-off. */
@@ -94,33 +95,75 @@ export async function summarizeTicket(
   return text.trim();
 }
 
+/** The AI's triage decision for a newly-arrived ticket. */
+export type TicketTriage = {
+  /** The classified category (always one of {@link TICKET_CATEGORIES}). */
+  category: TicketCategory;
+  /**
+   * `true` only when the ticket can be fully answered from the knowledge base
+   * *and* no KB escalation rule applies — the pipeline then auto-resolves it.
+   */
+  resolved: boolean;
+  /** The KB-grounded customer reply when `resolved`; an empty string otherwise. */
+  reply: string;
+};
+
 /**
- * Classifies a ticket into one of the {@link TICKET_CATEGORIES} from its subject
- * and first message, using OpenAI `gpt-5-nano` via the Vercel AI SDK. Uses the
- * SDK's `Output.choice` so the result is guaranteed to be a valid category (the
- * model is constrained to the option list — no free-text parsing needed).
+ * Triages a newly-arrived ticket in a single structured call, using OpenAI
+ * `gpt-5-nano` via the Vercel AI SDK. It both classifies the ticket into a
+ * {@link TICKET_CATEGORIES} category and decides whether it can be fully resolved
+ * from the provided knowledge base — if so, it drafts the customer reply. The
+ * SDK's `Output.object` constrains the model to the exact shape (guaranteed-valid
+ * category, boolean decision, reply text — no free-text parsing).
+ *
+ * The model must *decline* to resolve (`resolved: false`, `reply: ""`) whenever the
+ * answer isn't fully covered by the KB or any of the KB's escalation rules apply
+ * (legal threats, refunds outside the 30-day window, chargebacks/disputes,
+ * account-security concerns, or low confidence) — those tickets go to a human.
  *
  * Throws if `OPENAI_API_KEY` isn't configured, mirroring {@link polishReply}, so
- * the caller can surface/log a clean error. The inbound-email route runs this
- * fire-and-forget after responding, so a throw never affects the webhook.
+ * the caller can surface/log a clean error. The triage worker runs this off the
+ * request path (see `server/src/lib/queue.ts`), so a throw only fails the job.
  */
-export async function classifyTicket(
+export async function triageTicket(
   subject: string,
   body: string,
-): Promise<TicketCategory> {
+  knowledgeBase: string,
+): Promise<TicketTriage> {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY is not configured");
   }
 
   const { output } = await generateText({
     model: openai("gpt-5-nano"),
-    output: Output.choice({ options: [...TICKET_CATEGORIES] }),
-    prompt:
-      "Classify this support ticket into exactly one category. " +
+    output: Output.object({
+      schema: z.object({
+        category: z.enum([...TICKET_CATEGORIES]),
+        resolved: z.boolean(),
+        reply: z.string(),
+      }),
+    }),
+    instructions:
+      "You are a customer-support triage assistant. You are given a support " +
+      "ticket and the official support knowledge base. Do two things.\n\n" +
+      "1. Classify the ticket into exactly one category: " +
       `"${TICKET_CATEGORY.technical}" = product bugs, errors, how-to/setup issues; ` +
       `"${TICKET_CATEGORY.refund}" = refunds, billing, charges, cancellations; ` +
       `"${TICKET_CATEGORY.general}" = anything else.\n\n` +
-      `Subject: ${subject}\n\nMessage:\n${body}`,
+      "2. Decide whether the ticket can be FULLY resolved using ONLY the knowledge " +
+      "base. Set resolved=true ONLY IF the knowledge base clearly and completely " +
+      "answers the customer's question. Set resolved=false (and reply=\"\") if the " +
+      "answer isn't fully covered, if you're unsure, or if ANY of the knowledge " +
+      "base's escalation rules apply (e.g. legal threats, refunds outside the " +
+      "allowed window, chargebacks or payment disputes, account-security concerns). " +
+      "When in doubt, do NOT resolve — leave it for a human agent.\n\n" +
+      "When resolved=true, write `reply` as a complete, friendly answer to the " +
+      "customer grounded ONLY in the knowledge base: greet them, answer using the " +
+      "relevant policy/steps, and sign off as \"The Support Team\". Do not invent " +
+      "policies, facts, or steps that aren't in the knowledge base.",
+    prompt:
+      `Knowledge base:\n${knowledgeBase}\n\n` +
+      `----\n\nTicket subject: ${subject}\n\nTicket message:\n${body}`,
   });
 
   return output;

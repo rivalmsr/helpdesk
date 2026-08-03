@@ -2,7 +2,7 @@ import { z } from "zod";
 import {
   TICKET_SORT_FIELDS,
   TICKET_SORT_FIELD,
-  TICKET_STATUSES,
+  AGENT_TICKET_STATUSES,
   TICKET_CATEGORIES,
   TICKET_SUBJECT_MAX_LENGTH,
   TICKET_BODY_MAX_LENGTH,
@@ -43,16 +43,22 @@ export type InboundEmailInput = z.infer<typeof inboundEmailSchema>;
  * `status`/`category`/`q` are optional server-side filters (AND-ed together); `q`
  * is a case-insensitive contains over subject + requester email. The client omits
  * `q` when the search box is empty, so `min(1)` never trips on a blank value.
- * `page`/`pageSize` drive server-side pagination (`z.coerce` because query params
- * arrive as strings); both `.default(...)` so a bare request returns the first page.
+ * `status` only accepts the agent-facing statuses (the AI-owned ones are surfaced
+ * via `includeAiHandled`, not the dropdown). `includeAiHandled` reveals the
+ * AI-owned statuses (`new`/`processing`/`ai_resolved`) that are hidden by default —
+ * `z.stringbool()` since query params arrive as strings (plain `z.coerce.boolean()`
+ * would treat `"false"` as truthy). `page`/`pageSize` drive server-side pagination
+ * (`z.coerce` because query params arrive as strings); both `.default(...)` so a
+ * bare request returns the first page.
  */
 export const TICKET_PAGE_SIZE = 10;
 
 export const ticketListQuerySchema = z.object({
   sort: z.enum(TICKET_SORT_FIELDS).default(TICKET_SORT_FIELD.createdAt),
   order: z.enum(["asc", "desc"]).default("desc"),
-  status: z.enum(TICKET_STATUSES).optional(),
+  status: z.enum(AGENT_TICKET_STATUSES).optional(),
   category: z.enum(TICKET_CATEGORIES).optional(),
+  includeAiHandled: z.stringbool().optional(),
   q: z.string().trim().min(1).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(TICKET_PAGE_SIZE),
@@ -65,11 +71,13 @@ export type TicketListQuery = z.infer<typeof ticketListQuerySchema>;
  * is optional — only the ones present are changed. `assigneeId` is the id of the
  * agent to assign or `null` to unassign (the route verifies it's an active agent,
  * and restricts assignment to admins); `status`/`category` are the triage fields
- * any agent may change. At least one field must be supplied.
+ * any agent may change. `status` is limited to the agent-facing statuses
+ * (`AGENT_TICKET_STATUSES`) so an agent can't set an AI-owned status
+ * (`new`/`processing`/`ai_resolved`). At least one field must be supplied.
  */
 export const updateTicketSchema = z
   .object({
-    status: z.enum(TICKET_STATUSES).optional(),
+    status: z.enum(AGENT_TICKET_STATUSES).optional(),
     category: z.enum(TICKET_CATEGORIES).optional(),
     assigneeId: z.string().nullable().optional(),
   })

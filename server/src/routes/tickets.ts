@@ -7,6 +7,7 @@ import {
   polishReplySchema,
   TICKET_SORT_FIELD,
   TICKET_MESSAGE_TYPE,
+  AI_OWNED_TICKET_STATUSES,
   ROLE,
 } from "core";
 import type { Role } from "core";
@@ -57,9 +58,18 @@ ticketsRouter.get("/", requireAuth, async (req, res) => {
       ? { messages: { _count: query.order } }
       : { [query.sort]: query.order };
 
+  // AI-owned statuses (`new`/`processing`/`ai_resolved`) are hidden from the list
+  // by default: an explicit `status` filter wins, otherwise exclude them unless
+  // `includeAiHandled` reveals them (the "Show AI-handled" toggle).
+  const statusFilter: Prisma.TicketWhereInput["status"] = query.status
+    ? query.status
+    : query.includeAiHandled
+      ? undefined
+      : { notIn: [...AI_OWNED_TICKET_STATUSES] };
+
   // `q` matches subject OR requester email, case-insensitively.
   const where: Prisma.TicketWhereInput = {
-    ...(query.status ? { status: query.status } : {}),
+    ...(statusFilter ? { status: statusFilter } : {}),
     ...(query.category ? { category: query.category } : {}),
     ...(query.q
       ? {

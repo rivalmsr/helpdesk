@@ -139,15 +139,18 @@ function TicketsPage() {
   const [category, setCategory] = useState<TicketCategory | 'all'>('all')
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebouncedValue(search.trim(), 300)
+  // Reveal the AI-owned tickets (new/processing/ai_resolved) hidden by default.
+  const [showAiHandled, setShowAiHandled] = useState(false)
 
   const [pageSize, setPageSize] = useState<number>(TICKET_PAGE_SIZE)
 
-  // 1-based page. Reset to the first page whenever the sort, a filter, or the
-  // page size changes, so you never land on a now-out-of-range page.
+  // 1-based page. Reset to the first page whenever the sort, a filter, the
+  // AI-handled toggle, or the page size changes, so you never land on a
+  // now-out-of-range page.
   const [page, setPage] = useState(1)
   useEffect(() => {
     setPage(1)
-  }, [sort, status, category, debouncedSearch, pageSize])
+  }, [sort, status, category, debouncedSearch, showAiHandled, pageSize])
 
   const hasFilters =
     status !== 'all' || category !== 'all' || search.trim() !== ''
@@ -163,7 +166,7 @@ function TicketsPage() {
     queryKey: [
       'tickets',
       sort,
-      { status, category, q: debouncedSearch },
+      { status, category, q: debouncedSearch, showAiHandled },
       page,
       pageSize,
     ],
@@ -175,6 +178,7 @@ function TicketsPage() {
           // Omit params at their defaults, so the default request stays sort-only.
           ...(status !== 'all' ? { status } : {}),
           ...(category !== 'all' ? { category } : {}),
+          ...(showAiHandled ? { includeAiHandled: true } : {}),
           ...(debouncedSearch ? { q: debouncedSearch } : {}),
           ...(page > 1 ? { page } : {}),
           ...(pageSize !== TICKET_PAGE_SIZE ? { pageSize } : {}),
@@ -224,6 +228,8 @@ function TicketsPage() {
               onStatusChange={setStatus}
               category={category}
               onCategoryChange={setCategory}
+              showAiHandled={showAiHandled}
+              onShowAiHandledChange={setShowAiHandled}
               hasFilters={hasFilters}
               onClear={clearFilters}
             />

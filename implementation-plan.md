@@ -48,10 +48,11 @@ Based on `project-scope.md` and `tech-stack.md`. Stack: React + TS + Tailwind + 
 
 ## Phase 6 — AI Features
 
-> **Status / deviation:** the AI service is built on **OpenAI `gpt-5-nano` via the Vercel AI SDK** (`server/src/lib/ai.ts`), not the Claude API originally planned. Classification, summaries, and reply polish ship; the knowledge base and KB-grounded suggested replies do not yet.
+> **Status / deviation:** the AI service is built on **OpenAI `gpt-5-nano` via the Vercel AI SDK** (`server/src/lib/ai.ts`), not the Claude API originally planned. Classification, KB auto-resolution, summaries, and reply polish ship. The knowledge base is a static markdown file (`server/knowledge-base.md`) fed whole into the triage prompt — there's no admin CRUD or Postgres full-text retrieval yet, and the AI answers auto-resolved tickets directly rather than suggesting a draft for an agent to send.
 
 - [x] Backend: LLM client wrapper + prompt templates (`server/src/lib/ai.ts`) — _uses OpenAI via the Vercel AI SDK instead of the Claude API_
 - [x] AI ticket classification: auto-assign category on ticket creation, editable by agent — _runs off the request path via a **pg-boss** job queue (`server/src/lib/queue.ts`) so the inbound webhook stays fast_
+- [x] AI knowledge-base auto-resolution: on inbound, the triage step tries to fully answer the ticket from `server/knowledge-base.md` — _if it can (and no escalation rule applies), it records an `ai_reply` and marks the ticket `ai_resolved` (hidden from the default list); otherwise it hands the ticket to a human (`open`). Status lifecycle: `new → processing → ai_resolved | open`._
 - [x] AI summary: generate a thread summary, shown on ticket detail — _generated on demand (re-run each click); **not** stored in the DB_
 - [x] AI reply polish: rewrite an agent's draft reply for clarity/tone (added beyond the original plan; not persisted)
 - [ ] Knowledge base: admin CRUD for KB articles

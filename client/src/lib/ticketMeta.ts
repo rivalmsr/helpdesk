@@ -12,6 +12,9 @@ import {
 } from 'core'
 
 export const STATUS_LABEL: Record<TicketStatus, string> = {
+  [TICKET_STATUS.new]: 'New',
+  [TICKET_STATUS.processing]: 'Processing',
+  [TICKET_STATUS.ai_resolved]: 'AI Resolved',
   [TICKET_STATUS.open]: 'Open',
   [TICKET_STATUS.resolved]: 'Resolved',
   [TICKET_STATUS.closed]: 'Closed',
@@ -21,6 +24,9 @@ export const STATUS_VARIANT: Record<
   TicketStatus,
   'default' | 'secondary' | 'outline'
 > = {
+  [TICKET_STATUS.new]: 'outline',
+  [TICKET_STATUS.processing]: 'secondary',
+  [TICKET_STATUS.ai_resolved]: 'secondary',
   [TICKET_STATUS.open]: 'default',
   [TICKET_STATUS.resolved]: 'secondary',
   [TICKET_STATUS.closed]: 'outline',
@@ -35,5 +41,6 @@ export const CATEGORY_LABEL: Record<TicketCategory, string> = {
 export const MESSAGE_TYPE_LABEL: Record<TicketMessageType, string> = {
   [TICKET_MESSAGE_TYPE.inbound]: 'Inbound',
   [TICKET_MESSAGE_TYPE.agent_reply]: 'Agent reply',
+  [TICKET_MESSAGE_TYPE.ai_reply]: 'AI reply',
   [TICKET_MESSAGE_TYPE.ai_draft]: 'AI draft',
 }

@@ -86,7 +86,7 @@ model Ticket {
   // Length backstop mirrors TICKET_SUBJECT_MAX_LENGTH in core/src/ticket.ts.
   subject        String          @db.VarChar(200)
   requesterEmail String
-  status         TicketStatus    @default(open)
+  status         TicketStatus    @default(new)
   category       TicketCategory  @default(general)
   assigneeId     String?
   assignee       User?           @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
@@ -100,6 +100,9 @@ model Ticket {
 }
 
 enum TicketStatus {
+  new
+  processing
+  ai_resolved
   open
   resolved
   closed
@@ -130,5 +133,6 @@ model TicketMessage {
 enum TicketMessageType {
   inbound
   agent_reply
+  ai_reply
   ai_draft
 }

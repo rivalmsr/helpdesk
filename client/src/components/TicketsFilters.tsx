@@ -1,12 +1,14 @@
 import { Search, X } from 'lucide-react'
 import {
-  TICKET_STATUSES,
+  AGENT_TICKET_STATUSES,
   TICKET_CATEGORIES,
   type TicketStatus,
   type TicketCategory,
 } from 'core'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { FilterSelect, type FilterOption } from '@/components/FilterSelect'
 import { STATUS_LABEL } from '@/lib/ticketMeta'
 
@@ -16,9 +18,11 @@ const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 // The `all` sentinel is a UI-only "no filter" value (not a domain enum member),
 // so its literal key is fine; the enum options reference the `core` constants.
+// Only the agent-facing statuses are offered — the AI-owned ones
+// (new/processing/ai_resolved) are surfaced via the "Show AI-handled" toggle.
 const STATUS_OPTIONS: FilterOption<TicketStatus>[] = [
   { value: 'all', label: 'All statuses' },
-  ...TICKET_STATUSES.map((value) => ({ value, label: STATUS_LABEL[value] })),
+  ...AGENT_TICKET_STATUSES.map((value) => ({ value, label: STATUS_LABEL[value] })),
 ]
 
 const CATEGORY_OPTIONS: FilterOption<TicketCategory>[] = [
@@ -36,6 +40,8 @@ export function TicketsFilters({
   onStatusChange,
   category,
   onCategoryChange,
+  showAiHandled,
+  onShowAiHandledChange,
   hasFilters,
   onClear,
 }: {
@@ -45,6 +51,8 @@ export function TicketsFilters({
   onStatusChange: (value: TicketStatus | 'all') => void
   category: TicketCategory | 'all'
   onCategoryChange: (value: TicketCategory | 'all') => void
+  showAiHandled: boolean
+  onShowAiHandledChange: (value: boolean) => void
   hasFilters: boolean
   onClear: () => void
 }) {
@@ -79,6 +87,18 @@ export function TicketsFilters({
           Clear
         </Button>
       )}
+      {/* Reveal the AI-owned tickets (new / processing / AI-resolved) that are
+          hidden from the list by default. */}
+      <div className="ml-auto flex items-center gap-2">
+        <Switch
+          id="show-ai-handled"
+          checked={showAiHandled}
+          onCheckedChange={onShowAiHandledChange}
+        />
+        <Label htmlFor="show-ai-handled" className="text-sm text-muted-foreground">
+          Show AI-handled
+        </Label>
+      </div>
     </div>
   )
 }

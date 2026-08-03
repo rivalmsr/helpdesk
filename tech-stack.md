@@ -22,7 +22,11 @@
 ## AI
 
 - Claude API (Anthropic) for ticket classification, summaries, and suggested replies
-- **As implemented:** OpenAI `gpt-5-nano` via the Vercel AI SDK (`ai` + `@ai-sdk/openai`). Classification, summaries, and reply polish ship today; the code lives in `server/src/lib/ai.ts`. (This deviates from the Claude API intent above — CLAUDE.md is the source of truth for what's built.)
+- **As implemented:** OpenAI `gpt-5-nano` via the Vercel AI SDK (`ai` + `@ai-sdk/openai`). Classification, knowledge-base auto-resolution, summaries, and reply polish ship today; the code lives in `server/src/lib/ai.ts`. (This deviates from the Claude API intent above — CLAUDE.md is the source of truth for what's built.)
+
+## Knowledge base
+
+- A static markdown file (`server/knowledge-base.md`) of support policies and troubleshooting guides, loaded whole into the triage prompt so the AI can auto-resolve tickets it fully covers. No admin CRUD or full-text retrieval yet (Phase 6).
 
 ## Background jobs
 
