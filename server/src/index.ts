@@ -1,3 +1,7 @@
+// Must be first: initializes Sentry before any other module is imported.
+import "./instrument";
+
+import * as Sentry from "@sentry/bun";
 import express from "express";
 import { toNodeHandler } from "better-auth/node";
 import { prisma } from "./lib/prisma";
@@ -33,6 +37,11 @@ app.use("/api/tickets", ticketsRouter);
 app.use("/api/agents", agentsRouter);
 app.use("/api/stats", statsRouter);
 
+// Report errors thrown from the routes above to Sentry. Must come after all
+// routes but before any other error-handling middleware. No-op when Sentry is
+// disabled (unset DSN).
+Sentry.setupExpressErrorHandler(app);
+
 app.listen(port, () => {
   console.log(`Server listening on http://localhost:${port}`);
 });
@@ -41,4 +50,7 @@ app.listen(port, () => {
 // can't start, the API still serves — tickets just keep their default category.
 startQueue()
   .then(() => console.log("Job queue started"))
-  .catch((err) => console.error("Failed to start job queue", err));
+  .catch((err) => {
+    console.error("Failed to start job queue", err);
+    Sentry.captureException(err);
+  });

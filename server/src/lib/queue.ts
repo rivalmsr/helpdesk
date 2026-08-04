@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import * as Sentry from "@sentry/bun";
 import { PgBoss } from "pg-boss";
 import { TICKET_MESSAGE_TYPE, TICKET_STATUS } from "core";
 import { prisma } from "./prisma";
@@ -28,7 +29,10 @@ type TriageTicketJob = {
 
 // One boss instance per process, connected via the shared `DATABASE_URL`.
 const boss = new PgBoss(process.env.DATABASE_URL as string);
-boss.on("error", (err) => console.error("pg-boss error", err));
+boss.on("error", (err) => {
+  console.error("pg-boss error", err);
+  Sentry.captureException(err);
+});
 
 /**
  * Start pg-boss, create the triage queue (with a retry policy), and register its
@@ -86,6 +90,9 @@ export async function startQueue(): Promise<void> {
           });
         }
       } catch (err) {
+        // Triage failed off the request path, so it never reaches the Express
+        // error handler — report it here. Tag with the ticket for context.
+        Sentry.captureException(err, { tags: { ticketId } });
         // Never leave a ticket stuck (and hidden) in `processing`: surface it to a
         // human. Best-effort — swallow this update's own error so the original
         // failure is what pg-boss sees and retries.
