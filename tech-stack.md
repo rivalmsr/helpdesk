@@ -5,11 +5,13 @@
 - React with TypeScript
 - Tailwind CSS
 - React Router
+- **As implemented:** Vite (build/dev), shadcn/ui on `@base-ui/react` primitives, TanStack Query + axios for data fetching, and a custom **cobalt-blue theme** with a **semantic status/category color language** and a light/dark/system **theme toggle** (see CLAUDE.md → Theming & dark mode)
 
 ## Backend
 
 - Node.js with Express and TypeScript
 - Database sessions for authentication
+- **As implemented:** runs on the **Bun** runtime (workspaces monorepo with a shared `core` package); authentication is **Better Auth** (email/password, `admin`/`agent` roles, Postgres-backed sessions), not a hand-rolled session store
 
 ## Database
 
@@ -35,8 +37,14 @@
 ## Email
 
 - SendGrid or Mailgun for outbound replies and inbound webhooks
+- **As implemented:** inbound is a **provider-agnostic JSON webhook** (`POST /api/inbound-email`, shared-secret header), not wired to a specific provider yet; outbound email sending is **not built** (replies are stored on the ticket)
+
+## Error monitoring
+
+- **As implemented:** Sentry on both packages — `@sentry/react` (client) and `@sentry/bun` (server); non-fatal by design (disabled when the DSN is unset). See CLAUDE.md → Error monitoring.
 
 ## Deployment
 
 - Docker + cloud provider (AWS, Railway, Fly.io, etc.)
+- **As implemented:** not set up yet — no Dockerfiles / compose or deploy config (run locally with `bun dev` against a local Postgres)
 

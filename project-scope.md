@@ -22,9 +22,19 @@ Build a ticket management system that uses AI to automatically classify, respond
 
 ## Ticket Statuses
 
+Agent-facing (settable by an agent, shown in the default list):
+
 - Open
 - Resolved
 - Closed
+
+AI-owned (set by the triage pipeline, hidden from the default list behind a "Show AI-handled" toggle) — _added during implementation for the auto-resolution flow:_
+
+- New (just created)
+- Processing (triage running)
+- AI Resolved (auto-answered from the knowledge base)
+
+Lifecycle: `new → processing → ai_resolved | open → resolved | closed` (a customer reply reopens a resolved/closed ticket to `open`).
 
 ## Ticket Categories
 

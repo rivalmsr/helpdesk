@@ -6,7 +6,7 @@ See [`project-scope.md`](./project-scope.md) for the full feature scope, [`tech-
 
 ## Stack
 
-- **Client**: React 19 + TypeScript, Vite, Tailwind CSS v4, shadcn/ui, TanStack Query
+- **Client**: React 19 + TypeScript, Vite, Tailwind CSS v4, shadcn/ui, TanStack Query (cobalt-blue theme with a light/dark/system toggle)
 - **Server**: Express 5 + TypeScript
 - **Database**: PostgreSQL via Prisma 7
 - **Auth**: Better Auth (email/password, `admin`/`agent` roles)
@@ -92,4 +92,4 @@ e2e/      Playwright end-to-end specs
 
 ## Status
 
-Built so far: project scaffolding, authentication and admin user management, inbound email ingestion, and the agent-facing ticket UI (list + detail). The AI features are in place: on inbound email a pg-boss queue runs a single **triage** step that **classifies** the ticket and tries to **auto-resolve it from the knowledge base** (`server/knowledge-base.md`) — answering the customer and marking it AI-resolved, or handing it to a human when it can't. Tickets move through a lifecycle (`new → processing → ai_resolved | open → resolved | closed`); AI-handled tickets are hidden from the default list behind a "Show AI-handled" toggle. Plus **on-demand thread summaries** and **AI polish for draft replies** — all on OpenAI `gpt-5-nano` via the Vercel AI SDK. Still to come from Phase 6: admin CRUD for the knowledge base and AI-suggested reply drafts. See [`implementation-plan.md`](./implementation-plan.md) for the roadmap.
+Built so far: project scaffolding, authentication and admin user management, inbound email ingestion, and the agent-facing ticket UI (list + detail). The AI features are in place: on inbound email a pg-boss queue runs a single **triage** step that **classifies** the ticket and tries to **auto-resolve it from the knowledge base** (`server/knowledge-base.md`) — answering the customer and marking it AI-resolved, or handing it to a human when it can't. Tickets move through a lifecycle (`new → processing → ai_resolved | open → resolved | closed`); AI-handled tickets are hidden from the default list behind a "Show AI-handled" toggle. Plus **on-demand thread summaries** and **AI polish for draft replies** — all on OpenAI `gpt-5-nano` via the Vercel AI SDK. There's also an **agent dashboard** (KPI tiles + a tickets-per-day chart) and a polished UI: a cobalt-blue theme, a **semantic status/category color language**, and a **light / dark / system** theme toggle. Still to come from Phase 6: admin CRUD for the knowledge base and AI-suggested reply drafts. See [`implementation-plan.md`](./implementation-plan.md) for the roadmap.

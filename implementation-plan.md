@@ -1,50 +1,54 @@
 # Implementation Plan
 
-Based on `project-scope.md` and `tech-stack.md`. Stack: React + TS + Tailwind + React Router (frontend), Node/Express + TS with database-backed sessions (backend), PostgreSQL + Prisma, Claude API, SendGrid/Mailgun, Docker.
+Based on `project-scope.md` and `tech-stack.md`. Original planned stack: React + TS + Tailwind + React Router (frontend), Node/Express + TS with database-backed sessions (backend), PostgreSQL + Prisma, Claude API, SendGrid/Mailgun, Docker.
+
+> **As built:** the checkboxes and inline _italic notes_ below track what actually shipped. Key deviations: **Bun** runtime + workspaces monorepo (with a shared `core` package); **Better Auth** for auth; **OpenAI `gpt-5-nano` via the Vercel AI SDK** instead of the Claude API; **pg-boss** for background jobs; **Sentry** for error monitoring. Outbound email, a `KnowledgeBaseArticle` model, and Docker/deploy are not built yet. `CLAUDE.md` is the source of truth for the current implementation.
 
 ## Phase 1 — Project Setup & Foundations
 
-- [ ] Scaffold repo structure: `client/` (React + Vite + TS) and `server/` (Express + TS)
-- [ ] Configure ESLint/Prettier/tsconfig for both packages
-- [ ] Set up Tailwind CSS in `client/`
-- [ ] Set up React Router with a basic route shell
-- [ ] Set up Prisma in `server/`, connect to PostgreSQL
-- [ ] Add Docker Compose for local Postgres
-- [ ] Add `.env` handling for DB URL, session secret, Claude API key, email provider keys
-- [ ] Basic Express app skeleton: health check route, error-handling middleware, request logging
+- [x] Scaffold repo structure — _Bun **workspaces monorepo**: `client/` (React + Vite + TS), `server/` (Express + TS), and a shared `core/` package_
+- [x] Configure lint/tsconfig for both packages — _**oxlint** on the client (no Prettier/ESLint)_
+- [x] Set up Tailwind CSS in `client/` — _Tailwind v4 via `@tailwindcss/vite`_
+- [x] Set up React Router with a basic route shell
+- [x] Set up Prisma in `server/`, connect to PostgreSQL — _Prisma 7 with the `@prisma/adapter-pg` driver adapter_
+- [ ] Add Docker Compose for local Postgres — _not built; bring your own local Postgres_
+- [x] Add `.env` handling for DB URL, auth secret, LLM API key, webhook secret — _uses `OPENAI_API_KEY`, not a Claude key_
+- [x] Basic Express app skeleton: health check route, error-handling middleware — _`GET /api/health` (runs `SELECT 1`) + the Sentry Express error handler; no request-logging middleware yet_
 
 ## Phase 2 — Data Model
 
-- [ ] Design Prisma schema: `User` (role: admin/agent), `Session`, `Ticket` (status, category, subject, requester email, timestamps), `TicketMessage` (thread entries: inbound email, agent reply, AI-suggested draft), `KnowledgeBaseArticle` (title, content, tags)
-- [ ] Run initial migration
-- [ ] Seed script: create default admin user
+- [x] Design Prisma schema: `User`/`Session`/`Account`/`Verification` (Better Auth), `Ticket`, `TicketMessage` — _no `KnowledgeBaseArticle` model: the KB is a static markdown file (`server/knowledge-base.md`)_
+- [x] Run initial migration
+- [x] Seed script: create default admin user — _also an optional agent (`seedUser` helper)_
 
 ## Phase 3 — Authentication & User Management
 
-- [ ] Backend: session store backed by Postgres (e.g. `express-session` + Prisma/pg session adapter)
-- [ ] Backend: login endpoint with password hashing (bcrypt), logout endpoint (destroys session row)
-- [ ] Backend: auth middleware + role guard (admin-only vs agent routes)
-- [ ] Backend: admin endpoints to create/list/deactivate agents
-- [ ] Frontend: login page
-- [ ] Frontend: session-aware route protection (redirect unauthenticated users)
-- [ ] Frontend: admin user-management page (list agents, create-agent form)
+> **Status / deviation:** built on **Better Auth** (email/password, self-serve sign-up disabled) rather than a hand-rolled `express-session` + bcrypt setup. Sessions are Postgres-backed via Prisma; password hashing and session management come from Better Auth.
+
+- [x] Backend: session store backed by Postgres — _Better Auth `Session`/`Account` models via Prisma_
+- [x] Backend: login/logout with password hashing — _Better Auth email/password (`credential` provider)_
+- [x] Backend: auth middleware + role guard (admin-only vs agent routes) — _`requireRole`/`requireAuth` (`server/src/lib/authorize.ts`)_
+- [x] Backend: admin endpoints to create/list/deactivate agents — _`/api/users` CRUD; delete is a **soft delete**_
+- [x] Frontend: login page
+- [x] Frontend: session-aware route protection (redirect unauthenticated users)
+- [x] Frontend: admin user-management page (list agents, create-agent form)
 
 ## Phase 4 — Core Ticket Management
 
-- [ ] Backend: list tickets endpoint with filtering (status, category, assignee) and sorting
-- [ ] Backend: ticket detail endpoint (ticket + message thread)
-- [ ] Backend: update ticket status/category endpoint
-- [ ] Backend: add manual reply/message to a ticket
-- [ ] Frontend: ticket list page with filter/sort controls
-- [ ] Frontend: ticket detail page with thread view and status/category controls
-- [ ] Frontend: manual reply form
+- [x] Backend: list tickets endpoint with filtering (status, category, assignee) and sorting
+- [x] Backend: ticket detail endpoint (ticket + message thread)
+- [x] Backend: update ticket status/category endpoint
+- [x] Backend: add manual reply/message to a ticket
+- [x] Frontend: ticket list page with filter/sort controls
+- [x] Frontend: ticket detail page with thread view and status/category controls
+- [x] Frontend: manual reply form
 
 ## Phase 5 — Email Ingestion & Outbound
 
-- [ ] Configure inbound email webhook endpoint (SendGrid Inbound Parse or Mailgun Routes)
-- [ ] Parse inbound payload → create new ticket, or append to existing ticket by matching thread headers (`References`/`In-Reply-To`)
-- [ ] Backend: outbound email service (send agent/AI replies via SendGrid/Mailgun API)
-- [ ] Error handling + logging for webhook failures (malformed payloads, provider errors)
+- [x] Configure inbound email webhook endpoint — _provider-agnostic JSON at `POST /api/inbound-email`, guarded by a shared-secret header; not wired to a specific provider's parse format yet_
+- [x] Parse inbound payload → create new ticket, or append to existing ticket by matching thread headers (`References`/`In-Reply-To`) — _also deduped by `Message-ID`_
+- [ ] Backend: outbound email service (send agent/AI replies via SendGrid/Mailgun API) — _not built: replies are stored on the ticket, not emailed out_
+- [x] Error handling + logging for webhook failures (malformed payloads, provider errors) — _Zod validation + try/catch; errors reported to Sentry (see Phase 8)_
 
 ## Phase 6 — AI Features
 
@@ -64,14 +68,16 @@ Based on `project-scope.md` and `tech-stack.md`. Stack: React + TS + Tailwind + 
 
 ## Phase 7 — Dashboard
 
-- [ ] Backend: aggregate stats endpoint (counts by status/category, tickets per agent)
-- [ ] Frontend: dashboard page with summary cards and recent-ticket feed
+- [x] Backend: aggregate stats endpoint (`GET /api/stats`: totals, open, AI-resolved, avg. resolution time, 30-day daily volume)
+- [x] Frontend: dashboard page (`DashboardPage`) with KPI summary cards + a tickets-per-day volume chart (`TicketVolumeChart`)
 
 ## Phase 8 — Polish, Testing, Deployment
 
-- [ ] Request validation (e.g. zod) on all endpoints
-- [ ] Consistent API error response shape
-- [ ] Automated tests: auth flow, ticket CRUD, AI service (mocked)
+- [x] Request validation with Zod on all endpoints (via the `parseBody` helper)
+- [x] Consistent API error response shape (`{ error: "<message>" }`, read client-side by `getServerErrorMessage`)
+- [x] Automated tests: component (Vitest + RTL) and E2E (Playwright); AI service mocked
+- [x] UI polish: cobalt-blue theme, semantic status/category color language, and a light/dark/system theme toggle (see CLAUDE.md → Theming & dark mode)
+- [x] Error monitoring: Sentry on client (`@sentry/react`) + server (`@sentry/bun`), disabled by default when the DSN is unset
 - [ ] Dockerfiles for client and server, production docker-compose
 - [ ] Deploy to chosen cloud provider, document required env vars
 - [ ] Basic logging/monitoring for production
