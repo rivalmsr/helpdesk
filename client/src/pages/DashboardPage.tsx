@@ -26,21 +26,39 @@ type StatsResponse = {
   dailyVolume: DailyVolume[]
 }
 
+// A small leading dot that ties a tile to the app's status color language:
+// cobalt for the active/open metric, violet for the AI-owned ones.
+const ACCENT_DOT = {
+  blue: 'bg-primary',
+  violet: 'bg-violet-500',
+} as const
+
 // One KPI tile: a sentence-case label over a large, semibold value (stat-tile
 // contract). `value` is a node so callers can render "—" / formatted strings.
+// An optional `accent` dot color-codes the tile to match the status palette.
 function StatCard({
   label,
   value,
   hint,
+  accent,
 }: {
   label: string
   value: ReactNode
   hint?: string
+  accent?: keyof typeof ACCENT_DOT
 }) {
   return (
     <Card size="sm">
       <CardContent>
-        <p className="text-sm text-muted-foreground">{label}</p>
+        <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          {accent && (
+            <span
+              className={`size-1.5 rounded-full ${ACCENT_DOT[accent]}`}
+              aria-hidden
+            />
+          )}
+          {label}
+        </p>
         <p className="mt-2 text-3xl font-semibold tabular-nums">{value}</p>
         {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
       </CardContent>
@@ -108,12 +126,21 @@ function DashboardPage() {
               ) : (
                 <>
                   <StatCard label={TILE_LABELS[0]} value={data.total} />
-                  <StatCard label={TILE_LABELS[1]} value={data.open} />
-                  <StatCard label={TILE_LABELS[2]} value={data.aiResolved} />
+                  <StatCard
+                    label={TILE_LABELS[1]}
+                    value={data.open}
+                    accent="blue"
+                  />
+                  <StatCard
+                    label={TILE_LABELS[2]}
+                    value={data.aiResolved}
+                    accent="violet"
+                  />
                   <StatCard
                     label={TILE_LABELS[3]}
                     value={`${aiResolvedPct}%`}
                     hint={`${data.aiResolved} of ${data.total} tickets`}
+                    accent="violet"
                   />
                   <StatCard
                     label={TILE_LABELS[4]}

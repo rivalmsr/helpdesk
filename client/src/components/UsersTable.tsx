@@ -64,7 +64,12 @@ export function UsersTable({
               </TableCell>
               <TableCell>
                 <Badge
-                  variant={user.role === ROLE.admin ? 'default' : 'secondary'}
+                  variant="secondary"
+                  className={
+                    user.role === ROLE.admin
+                      ? 'bg-blue-100 capitalize text-blue-700 dark:bg-blue-400/10 dark:text-blue-300'
+                      : 'capitalize'
+                  }
                 >
                   {user.role}
                 </Badge>

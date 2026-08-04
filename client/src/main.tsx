@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import * as Sentry from '@sentry/react'
 import './index.css'
 import App from './App.tsx'
+import { ThemeProvider } from './lib/theme'
 
 // Non-fatal by design: with no `VITE_SENTRY_DSN` the SDK stays disabled, so dev
 // and tests need no Sentry account. Set the DSN in `client/.env` to enable it.
@@ -20,14 +21,16 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <Sentry.ErrorBoundary
       fallback={
-        <div className="flex min-h-screen items-center justify-center text-gray-500">
+        <div className="flex min-h-screen items-center justify-center text-muted-foreground">
           Something went wrong. Please reload the page.
         </div>
       }
     >
-      <QueryClientProvider client={queryClient}>
-        <App />
-      </QueryClientProvider>
+      <ThemeProvider>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </ThemeProvider>
     </Sentry.ErrorBoundary>
   </StrictMode>,
 )

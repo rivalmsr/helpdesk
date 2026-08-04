@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { useSession } from '@/lib/auth-client'
+import { ThemeProvider } from '@/lib/theme'
 import NavBar from './NavBar'
 
 // NavBar chooses which links to show from the session role; mock the auth hook
@@ -23,9 +24,11 @@ const renderNavBarAs = (user: SessionUser) => {
     data: { user },
   } as unknown as ReturnType<typeof useSession>)
   return render(
-    <MemoryRouter>
-      <NavBar />
-    </MemoryRouter>,
+    <ThemeProvider>
+      <MemoryRouter>
+        <NavBar />
+      </MemoryRouter>
+    </ThemeProvider>,
   )
 }
 

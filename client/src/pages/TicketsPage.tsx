@@ -16,7 +16,7 @@ import {
   type TicketStatus,
   type TicketCategory,
 } from 'core'
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge, CategoryBadge } from '@/components/TicketBadge'
 import {
   Card,
   CardContent,
@@ -28,7 +28,6 @@ import { Pagination } from '@/components/Pagination'
 import { TicketsFilters } from '@/components/TicketsFilters'
 import { TicketsTable } from '@/components/TicketsTable'
 import { formatDate } from '@/lib/format'
-import { STATUS_LABEL, STATUS_VARIANT, CATEGORY_LABEL } from '@/lib/ticketMeta'
 import { useDebouncedValue } from '@/lib/useDebouncedValue'
 
 // Let column defs carry an alignment hint used by the header/cell renderers.
@@ -92,18 +91,14 @@ const columns: ColumnDef<Ticket, any>[] = [
     header: 'Status',
     cell: (info) => {
       const status = info.getValue<TicketStatus>()
-      return (
-        <Badge variant={STATUS_VARIANT[status]}>{STATUS_LABEL[status]}</Badge>
-      )
+      return <StatusBadge status={status} />
     },
   }),
   columnHelper.accessor('category', {
     id: TICKET_SORT_FIELD.category,
     header: 'Category',
     cell: (info) => (
-      <Badge variant="outline">
-        {CATEGORY_LABEL[info.getValue<TicketCategory>()]}
-      </Badge>
+      <CategoryBadge category={info.getValue<TicketCategory>()} />
     ),
   }),
   columnHelper.accessor((row) => row._count.messages, {
